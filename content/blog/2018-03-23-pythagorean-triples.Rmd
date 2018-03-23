@@ -222,7 +222,7 @@ Iterating plots is now quite quick. First, the relationship between $a$ and $b$,
 i.e. is the triangle long and skinny or near isosceles?
 
 ```{r plot-b-a}
-plot_triples(aes(b, a, color = a_parity, max_c = Inf))
+plot_triples(aes(b, a, color = a_parity), max_c = Inf)
 plot_triples(aes(b, a, color = a_parity))
 ```
 

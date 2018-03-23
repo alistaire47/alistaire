@@ -237,7 +237,7 @@ plot_triples &lt;- function(aes,
 }</code></pre>
 <p>Iterating plots is now quite quick. First, the relationship between <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span>,
 i.e. is the triangle long and skinny or near isosceles?</p>
-<pre class="r"><code>plot_triples(aes(b, a, color = a_parity, max_c = Inf))</code></pre>
+<pre class="r"><code>plot_triples(aes(b, a, color = a_parity), max_c = Inf)</code></pre>
 <p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-b-a-1.png" width="672" /></p>
 <pre class="r"><code>plot_triples(aes(b, a, color = a_parity))</code></pre>
 <p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-b-a-2.png" width="672" /></p>
