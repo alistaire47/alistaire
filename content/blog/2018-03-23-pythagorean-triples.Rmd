@@ -113,7 +113,7 @@ result of subtracting the discriminant, $b$ adding (though subtracting from $P$
 is still simpler).
 
 Best of all, coded in R, this equation is nicely vectorized across $c$, so
-```{r}
+```{r legs-1}
 legs <- function(P, c){
     discriminant <- sqrt(c^2 + 2*P*c - P^2)
     a <- (P - c - discriminant) / 2
@@ -128,7 +128,7 @@ triples
 Within this result are the three triples: $\{30,40,50\}$, $\{24,45,51\}$ and 
 $\{20,48,52\}$, which can be separated by checking `a %% 1 == 0`:
 
-```{r}
+```{r legs-2}
 triples[triples$a %% 1 == 0, ]
 ```
 
@@ -136,7 +136,7 @@ With this foundation, to generate triples for all $P \le 1000$ just requires
 iterating over $P$. Optimized a bit and using `purrr::map_dfr` to collapse the 
 results,
 
-```{r}
+```{r triples-1000}
 triples <- purrr::map_df(12:1000, function(P){
     c <- seq.int(from = ceiling((sqrt(2) - 1) * P),    # 45-45-90
                  to = floor((P - 1) / 2),    # flat
@@ -162,7 +162,7 @@ Beautiful. Answering the question from here is trivial, but more usefully, this
 approach has produced a lovely dataset to explore, and can easily produce an 
 extended version by simply scaling to a bigger range of $P$ values:
 
-```{r}
+```{r triples-50000}
 triples <- purrr::map_df(12:50000, function(P){
     c <- seq.int(from = ceiling((sqrt(2) - 1) * P),    # 45-45-90
                  to = floor((P - 1) / 2),    # flat
@@ -188,7 +188,7 @@ Lovely. Let's explore. After making a lot of plots, I found I mostly just
 wanted to try different aesthetics, so I wrote a function, coloring points by 
 the parity of $a$ to show some differentiation:
 
-```{r}
+```{r plotting-function}
 library(tidyverse)
 
 plot_triples <- function(aes, 
@@ -221,7 +221,7 @@ plot_triples <- function(aes,
 Iterating plots is now quite quick. First, the relationship between $a$ and $b$, 
 i.e. is the triangle long and skinny or near isosceles?
 
-```{r}
+```{r plot-b-a}
 plot_triples(aes(b, a, color = a_parity, max_c = Inf))
 plot_triples(aes(b, a, color = a_parity))
 ```
@@ -256,7 +256,7 @@ They are parabolas centered along each axis with foci at the origin.
 
 Let's get some different views.
 
-```{r}
+```{r plot-c-a}
 plot_triples(aes(c, a, color = a_parity))
 ```
 
@@ -266,7 +266,7 @@ turned into diagonal lines.
 
 Curious. Let's rearrange.
 
-```{r}
+```{r plot-c-ac}
 plot_triples(aes(c, a/c, color = a_parity), 
              ylab = expression(over(a, c)))
 ```

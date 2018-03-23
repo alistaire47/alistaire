@@ -328,6 +328,33 @@
                                     March 23, 2018</time>
                             </header>
                             
+    
+
+    
+        
+        
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+
+        
+        
+        
+
+        <a href="/blog/p5-in-r/" class="image featured">
+            <img src="/img/2018/03/p5.png" alt="">
+        </a>
+    
+
 
                         </article>
                 
@@ -686,9 +713,9 @@ plot_triples &lt;- function(aes,
 <p>Iterating plots is now quite quick. First, the relationship between <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span>,
 i.e. is the triangle long and skinny or near isosceles?</p>
 <pre class="r"><code>plot_triples(aes(b, a, color = a_parity, max_c = Inf))</code></pre>
-<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-b-a-1.png" width="672" /></p>
 <pre class="r"><code>plot_triples(aes(b, a, color = a_parity))</code></pre>
-<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/unnamed-chunk-6-2.png" width="672" /></p>
+<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-b-a-2.png" width="672" /></p>
 <p>A few features are immediately apparent. Subsetting data by <span class="math inline">\(P\)</span> (as
 it was generated) returns a triangle, which makes sense—if <span class="math inline">\(a\)</span> is very small,
 <span class="math inline">\(b\)</span> can claim more of the maximum perimeter, whereas if <span class="math inline">\(a\)</span> is very large, the
@@ -714,14 +741,14 @@ simple to explain, <a href="https://en.wikipedia.org/wiki/Pythagorean_triple#Dis
 They are parabolas centered along each axis with foci at the origin.</p>
 <p>Let’s get some different views.</p>
 <pre class="r"><code>plot_triples(aes(c, a, color = a_parity))</code></pre>
-<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-c-a-1.png" width="672" /></p>
 <p>Plotting <span class="math inline">\(a\)</span> as a function of <span class="math inline">\(c\)</span> instead of <span class="math inline">\(b\)</span>, the rays remain, but the
 parabolas change. The concavity of one set has flipped, and the other has
 turned into diagonal lines.</p>
 <p>Curious. Let’s rearrange.</p>
 <pre class="r"><code>plot_triples(aes(c, a/c, color = a_parity), 
              ylab = expression(over(a, c)))</code></pre>
-<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p><img src="/blog/2018-03-23-pythagorean-triples_files/figure-html/plot-c-ac-1.png" width="672" /></p>
 <p>This is the same as the plot above, but with <span class="math inline">\(a\)</span> rescaled by <span class="math inline">\(c\)</span> so as to spread
 the rays converging at the origin across the y-axis. The multiples are now more
 easily identifiable: for <span class="math inline">\(\{3, 4, 5\}\)</span>, <span class="math inline">\(\frac{a}{c}=\frac{3}{5}=0.6\)</span>.</p>
@@ -1073,6 +1100,33 @@ further across the graph, particularly visible for the 0.6 line.</p>
               </time>
             </header>
             
+    
+
+    
+        
+        
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+
+        
+        
+        
+
+        <a href="/blog/p5-in-r/" class="image featured">
+            <img src="/img/2018/03/p5.png" alt="">
+        </a>
+    
+
 
           </article>
         

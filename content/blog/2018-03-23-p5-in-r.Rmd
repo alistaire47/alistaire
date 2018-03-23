@@ -3,6 +3,9 @@ title: p5 in R
 author: Edward Visel
 date: '2018-03-23'
 slug: p5-in-r
+featured: "p5.png"
+featuredalt: "p5 circles"
+featuredpath: "date"
 type: post
 categories:
   - R
@@ -25,7 +28,7 @@ Sean Kross wrote R bindings for p5.js in his [p5](https://github.com/seankross/p
 package so it can be written and R and published as an htmlwidget. This is a 
 little exploration of how it works.
 
-```{r, message=FALSE}
+```{r sketch, message=FALSE}
 library(p5)
 
 # runs once at start
