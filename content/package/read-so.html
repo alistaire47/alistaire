@@ -1,0 +1,235 @@
+---
+title: read.so
+author: Edward Visel
+date: '2018-03-21'
+slug: read-so
+type: itemized
+description: "Read tables from Stack Overflow questions into R"
+format: R
+categories:
+  - R
+  - package
+tags:
+  - stack overflow
+  - print
+  - data frame
+---
+
+
+
+<p>For further information including complete documentation, see <a href="https://alistaire47.github.io/read.so/">read.so’s full
+website</a>.</p>
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+<div id="read.so" class="section level1">
+<h1>read.so</h1>
+<p><a href="https://travis-ci.org/alistaire47/read.so"><img src="https://travis-ci.org/alistaire47/read.so.svg?branch=master" alt="Travis-CI Build Status" /></a>
+<a href="https://ci.appveyor.com/project/alistaire47/read-so"><img src="https://ci.appveyor.com/api/projects/status/17mg5b1yd926krpk?svg=true" alt="AppVeyor Build status" /></a>
+<a href="https://codecov.io/github/alistaire47/read.so?branch=master"><img src="https://img.shields.io/codecov/c/github/alistaire47/read.so/master.svg" alt="Coverage Status" /></a>
+<a href="https://cran.r-project.org/package=read.so"><embed src="http://www.r-pkg.org/badges/version/read.so" /></a></p>
+<div id="installation" class="section level3">
+<h3>Installation</h3>
+<p>read.so is not on CRAN, but you can install it with</p>
+<pre class="r"><code># install.packages(&quot;devtools&quot;)
+devtools::install_github(&quot;alistaire47/read.so&quot;)</code></pre>
+<hr />
+</div>
+<div id="read-tables-from-stack-overflow-questions-into-r" class="section level2">
+<h2>Read Tables from Stack Overflow Questions into R</h2>
+<p>Sometimes you see a really interesting question on Stack Overflow, but the asker
+only presents the data as a presentation-style table instead of as runnable R
+code. Fear no more! read.so will read even heinous tables into a data frame
+in a trice.</p>
+<div id="read-data-frame-print-output-back-a-data-frame" class="section level3">
+<h3>Read data frame print output back a data frame</h3>
+<p>For instance, should you want to return output copied from the R console back
+into your own session, use <code>read.so</code> for a data.frame, and <code>read_so</code> for a
+tibble. Pass in a filepath, a raw string of text, a vector of lines, or if the
+data is on the clipboard, nothing at all, and the functions will grab it for
+you:</p>
+<pre class="r"><code>library(read.so)
+
+iris_lines &lt;- capture.output(head(iris))
+
+iris_lines
+#&gt; [1] &quot;  Sepal.Length Sepal.Width Petal.Length Petal.Width Species&quot;
+#&gt; [2] &quot;1          5.1         3.5          1.4         0.2  setosa&quot;
+#&gt; [3] &quot;2          4.9         3.0          1.4         0.2  setosa&quot;
+#&gt; [4] &quot;3          4.7         3.2          1.3         0.2  setosa&quot;
+#&gt; [5] &quot;4          4.6         3.1          1.5         0.2  setosa&quot;
+#&gt; [6] &quot;5          5.0         3.6          1.4         0.2  setosa&quot;
+#&gt; [7] &quot;6          5.4         3.9          1.7         0.4  setosa&quot;
+
+read.so(iris_lines)
+#&gt;   Sepal.Length Sepal.Width Petal.Length Petal.Width Species
+#&gt; 1          5.1         3.5          1.4         0.2  setosa
+#&gt; 2          4.9         3.0          1.4         0.2  setosa
+#&gt; 3          4.7         3.2          1.3         0.2  setosa
+#&gt; 4          4.6         3.1          1.5         0.2  setosa
+#&gt; 5          5.0         3.6          1.4         0.2  setosa
+#&gt; 6          5.4         3.9          1.7         0.4  setosa
+
+read_so(iris_lines)
+#&gt; # A tibble: 6 x 5
+#&gt;   Sepal.Length Sepal.Width Petal.Length Petal.Width Species
+#&gt;          &lt;dbl&gt;       &lt;dbl&gt;        &lt;dbl&gt;       &lt;dbl&gt; &lt;chr&gt;  
+#&gt; 1         5.10        3.50         1.40       0.200 setosa 
+#&gt; 2         4.90        3.00         1.40       0.200 setosa 
+#&gt; 3         4.70        3.20         1.30       0.200 setosa 
+#&gt; 4         4.60        3.10         1.50       0.200 setosa 
+#&gt; 5         5.00        3.60         1.40       0.200 setosa 
+#&gt; 6         5.40        3.90         1.70       0.400 setosa
+
+clipr::write_clip(head(iris))
+
+read.so()
+#&gt;   Sepal.Length Sepal.Width Petal.Length Petal.Width Species
+#&gt; 1          5.1         3.5          1.4         0.2  setosa
+#&gt; 2          4.9         3.0          1.4         0.2  setosa
+#&gt; 3          4.7         3.2          1.3         0.2  setosa
+#&gt; 4          4.6         3.1          1.5         0.2  setosa
+#&gt; 5          5.0         3.6          1.4         0.2  setosa
+#&gt; 6          5.4         3.9          1.7         0.4  setosa</code></pre>
+<p>Further, <code>read_so</code> will attempt to read in the results of printing a tibble:</p>
+<pre class="r"><code>mtcars_lines &lt;- capture.output(tibble::as_tibble(mtcars))
+
+mtcars_lines
+#&gt;  [1] &quot;# A tibble: 32 x 11&quot;                                                 
+#&gt;  [2] &quot;     mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb&quot;
+#&gt;  [3] &quot; * &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;&quot;
+#&gt;  [4] &quot; 1  21.0    6.  160.  110.  3.90  2.62  16.5    0.    1.    4.    4.&quot;
+#&gt;  [5] &quot; 2  21.0    6.  160.  110.  3.90  2.88  17.0    0.    1.    4.    4.&quot;
+#&gt;  [6] &quot; 3  22.8    4.  108.   93.  3.85  2.32  18.6    1.    1.    4.    1.&quot;
+#&gt;  [7] &quot; 4  21.4    6.  258.  110.  3.08  3.22  19.4    1.    0.    3.    1.&quot;
+#&gt;  [8] &quot; 5  18.7    8.  360.  175.  3.15  3.44  17.0    0.    0.    3.    2.&quot;
+#&gt;  [9] &quot; 6  18.1    6.  225.  105.  2.76  3.46  20.2    1.    0.    3.    1.&quot;
+#&gt; [10] &quot; 7  14.3    8.  360.  245.  3.21  3.57  15.8    0.    0.    3.    4.&quot;
+#&gt; [11] &quot; 8  24.4    4.  147.   62.  3.69  3.19  20.0    1.    0.    4.    2.&quot;
+#&gt; [12] &quot; 9  22.8    4.  141.   95.  3.92  3.15  22.9    1.    0.    4.    2.&quot;
+#&gt; [13] &quot;10  19.2    6.  168.  123.  3.92  3.44  18.3    1.    0.    4.    4.&quot;
+#&gt; [14] &quot;# ... with 22 more rows&quot;
+
+read_so(mtcars_lines)
+#&gt; # A tibble: 10 x 11
+#&gt;      mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb
+#&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt;  1  21.0    6.  160.  110.  3.90  2.62  16.5    0.    1.    4.    4.
+#&gt;  2  21.0    6.  160.  110.  3.90  2.88  17.0    0.    1.    4.    4.
+#&gt;  3  22.8    4.  108.   93.  3.85  2.32  18.6    1.    1.    4.    1.
+#&gt;  4  21.4    6.  258.  110.  3.08  3.22  19.4    1.    0.    3.    1.
+#&gt;  5  18.7    8.  360.  175.  3.15  3.44  17.0    0.    0.    3.    2.
+#&gt;  6  18.1    6.  225.  105.  2.76  3.46  20.2    1.    0.    3.    1.
+#&gt;  7  14.3    8.  360.  245.  3.21  3.57  15.8    0.    0.    3.    4.
+#&gt;  8  24.4    4.  147.   62.  3.69  3.19  20.0    1.    0.    4.    2.
+#&gt;  9  22.8    4.  141.   95.  3.92  3.15  22.9    1.    0.    4.    2.
+#&gt; 10  19.2    6.  168.  123.  3.92  3.44  18.3    1.    0.    4.    4.</code></pre>
+</div>
+<div id="read-markdown-tables-into-data-frames" class="section level3">
+<h3>Read Markdown tables into data frames</h3>
+<p>When you need to read Markdown tables into R, read.so has you covered
+with <code>read.md</code> and <code>read_md</code>:</p>
+<pre class="r"><code>chick_lines &lt;- capture.output(
+    knitr::kable(head(ChickWeight), format = &quot;markdown&quot;)
+)
+
+cat(chick_lines, sep = &quot;\n&quot;)
+#&gt; 
+#&gt; 
+#&gt; | weight| Time|Chick |Diet |
+#&gt; |------:|----:|:-----|:----|
+#&gt; |     42|    0|1     |1    |
+#&gt; |     51|    2|1     |1    |
+#&gt; |     59|    4|1     |1    |
+#&gt; |     64|    6|1     |1    |
+#&gt; |     76|    8|1     |1    |
+#&gt; |     93|   10|1     |1    |
+
+read.md(chick_lines)
+#&gt;   weight Time Chick Diet
+#&gt; 1     42    0     1    1
+#&gt; 2     51    2     1    1
+#&gt; 3     59    4     1    1
+#&gt; 4     64    6     1    1
+#&gt; 5     76    8     1    1
+#&gt; 6     93   10     1    1
+
+read_md(chick_lines)
+#&gt; # A tibble: 6 x 4
+#&gt;   weight  Time Chick  Diet
+#&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+#&gt; 1    42.    0.    1.    1.
+#&gt; 2    51.    2.    1.    1.
+#&gt; 3    59.    4.    1.    1.
+#&gt; 4    64.    6.    1.    1.
+#&gt; 5    76.    8.    1.    1.
+#&gt; 6    93.   10.    1.    1.</code></pre>
+<p>They can handle a number of formats, including tables with delimiter rows
+composed of “-”, “=”, “+”, and whitespace.</p>
+</div>
+<div id="read-str-results-back-into-a-data-frame" class="section level3">
+<h3>Read <code>str</code> results back into a data frame</h3>
+<p>If all you have is the results of calling <code>str</code> on a data frame, <code>read.str</code>
+will read as many complete rows as possible into a new data frame of the same
+class as the original:</p>
+<pre class="r"><code>warp_lines &lt;- capture.output(str(warpbreaks))
+
+warp_lines
+#&gt; [1] &quot;&#39;data.frame&#39;:\t54 obs. of  3 variables:&quot;                                  
+#&gt; [2] &quot; $ breaks : num  26 30 54 25 70 52 51 26 67 18 ...&quot;                       
+#&gt; [3] &quot; $ wool   : Factor w/ 2 levels \&quot;A\&quot;,\&quot;B\&quot;: 1 1 1 1 1 1 1 1 1 1 ...&quot;      
+#&gt; [4] &quot; $ tension: Factor w/ 3 levels \&quot;L\&quot;,\&quot;M\&quot;,\&quot;H\&quot;: 1 1 1 1 1 1 1 1 1 2 ...&quot;
+
+read.str(warp_lines)
+#&gt;    breaks wool tension
+#&gt; 1      26    A       L
+#&gt; 2      30    A       L
+#&gt; 3      54    A       L
+#&gt; 4      25    A       L
+#&gt; 5      70    A       L
+#&gt; 6      52    A       L
+#&gt; 7      51    A       L
+#&gt; 8      26    A       L
+#&gt; 9      67    A       L
+#&gt; 10     18    A       M</code></pre>
+</div>
+<div id="read-tibbleglimpse-results-back-into-a-data-frame" class="section level3">
+<h3>Read <code>tibble::glimpse</code> results back into a data frame</h3>
+<p>Similarly, if the data was printed by <code>tibble::glimpse</code>, try <code>read.glimpse</code>
+or <code>read_glimpse</code>:</p>
+<pre class="r"><code>states &lt;- data.frame(state.name, state.abb, state.region, state.division, 
+                     state.area, center = state.center, state.x77)
+
+states_lines &lt;- capture.output(tibble::glimpse(states))
+
+states_lines
+#&gt;  [1] &quot;Observations: 50&quot;                                                         
+#&gt;  [2] &quot;Variables: 15&quot;                                                            
+#&gt;  [3] &quot;$ state.name     &lt;fct&gt; Alabama, Alaska, Arizona, Arkansas, California,...&quot;
+#&gt;  [4] &quot;$ state.abb      &lt;fct&gt; AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID,...&quot;
+#&gt;  [5] &quot;$ state.region   &lt;fct&gt; South, West, West, South, West, West, Northeast...&quot;
+#&gt;  [6] &quot;$ state.division &lt;fct&gt; East South Central, Pacific, Mountain, West Sou...&quot;
+#&gt;  [7] &quot;$ state.area     &lt;dbl&gt; 51609, 589757, 113909, 53104, 158693, 104247, 5...&quot;
+#&gt;  [8] &quot;$ center.x       &lt;dbl&gt; -86.7509, -127.2500, -111.6250, -92.2992, -119....&quot;
+#&gt;  [9] &quot;$ center.y       &lt;dbl&gt; 32.5901, 49.2500, 34.2192, 34.7336, 36.5341, 38...&quot;
+#&gt; [10] &quot;$ Population     &lt;dbl&gt; 3615, 365, 2212, 2110, 21198, 2541, 3100, 579, ...&quot;
+#&gt; [11] &quot;$ Income         &lt;dbl&gt; 3624, 6315, 4530, 3378, 5114, 4884, 5348, 4809,...&quot;
+#&gt; [12] &quot;$ Illiteracy     &lt;dbl&gt; 2.1, 1.5, 1.8, 1.9, 1.1, 0.7, 1.1, 0.9, 1.3, 2....&quot;
+#&gt; [13] &quot;$ Life.Exp       &lt;dbl&gt; 69.05, 69.31, 70.55, 70.66, 71.71, 72.06, 72.48...&quot;
+#&gt; [14] &quot;$ Murder         &lt;dbl&gt; 15.1, 11.3, 7.8, 10.1, 10.3, 6.8, 3.1, 6.2, 10....&quot;
+#&gt; [15] &quot;$ HS.Grad        &lt;dbl&gt; 41.3, 66.7, 58.1, 39.9, 62.6, 63.9, 56.0, 54.6,...&quot;
+#&gt; [16] &quot;$ Frost          &lt;dbl&gt; 20, 152, 15, 65, 20, 166, 139, 103, 11, 60, 0, ...&quot;
+#&gt; [17] &quot;$ Area           &lt;dbl&gt; 50708, 566432, 113417, 51945, 156361, 103766, 4...&quot;
+
+read_glimpse(states_lines)
+#&gt; # A tibble: 4 x 15
+#&gt;   state.name state.abb state.region state.division     state.area center.x
+#&gt; * &lt;fct&gt;      &lt;fct&gt;     &lt;fct&gt;        &lt;fct&gt;                   &lt;dbl&gt;    &lt;dbl&gt;
+#&gt; 1 Alabama    AL        South        East South Central     51609.    -86.8
+#&gt; 2 Alaska     AK        West         Pacific               589757.   -127. 
+#&gt; 3 Arizona    AZ        West         Mountain              113909.   -112. 
+#&gt; 4 Arkansas   AR        South        West Sou...            53104.    -92.3
+#&gt; # ... with 9 more variables: center.y &lt;dbl&gt;, Population &lt;dbl&gt;,
+#&gt; #   Income &lt;dbl&gt;, Illiteracy &lt;dbl&gt;, Life.Exp &lt;dbl&gt;, Murder &lt;dbl&gt;,
+#&gt; #   HS.Grad &lt;dbl&gt;, Frost &lt;dbl&gt;, Area &lt;dbl&gt;</code></pre>
+</div>
+</div>
+</div>

@@ -1,0 +1,115 @@
+---
+title: pipecleaner
+author: Edward Visel
+date: '2018-03-21'
+slug: pipecleaner
+description: "Debug magrittr pipelines"
+format: R
+type: itemized
+categories:
+  - R
+  - package
+tags:
+  - pipe
+  - magrittr
+  - debugging
+  - utility
+---
+
+
+
+<p>For further information including complete documentation, see <a href="https://alistaire47.github.io/pipecleaner/">pipecleaner’s
+full website</a>.</p>
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+<div id="pipecleaner" class="section level1">
+<h1>pipecleaner</h1>
+<p><a href="https://travis-ci.org/alistaire47/pipecleaner"><img src="https://travis-ci.org/alistaire47/pipecleaner.svg?branch=master" alt="Travis build status" /></a>
+<a href="https://ci.appveyor.com/project/alistaire47/pipecleaner"><img src="https://ci.appveyor.com/api/projects/status/agx2ht7cpwrnrk0k?svg=true" alt="AppVeyor build status" /></a>
+<a href="https://codecov.io/github/alistaire47/pipecleaner?branch=master"><img src="https://codecov.io/gh/alistaire47/pipecleaner/branch/master/graph/badge.svg" alt="Coverage status" /></a>
+<a href="https://cran.r-project.org/package=pipecleaner"><img src="https://www.r-pkg.org/badges/version/pipecleaner" alt="CRAN status" /></a>
+<a href="https://www.tidyverse.org/lifecycle/#experimental"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="lifecycle" /></a></p>
+<p>pipecleaner is a utility R package to debug pipelines using the magrittr <code>%&gt;%</code>
+pipe. Its <code>debug_pipeline</code> launches the debugging browser on the input pipeline
+in a form that allows the user to step through the successive calls of the
+pipeline, examining the output of each successive element.</p>
+<div id="installation" class="section level2">
+<h2>Installation</h2>
+<p>pipecleaner is not currently on CRAN, but can be installed with</p>
+<pre class="r"><code># install.packages(&quot;devtools&quot;)
+devtools::install_github(&quot;alistaire47/pipecleaner&quot;)</code></pre>
+</div>
+<div id="debugging-pipelines" class="section level2">
+<h2>Debugging pipelines</h2>
+<p>To debug a pipeline, call <code>debug_pipeline</code> on the raw code or a character
+string of the code. If no input is supplied and it is called
+from <a href="https://www.rstudio.com/products/RStudio/">RStudio</a>, it will use whatever
+code is highlighed in the source editor as input.</p>
+<p><code>debug_pipeline</code> can also be called via
+an <a href="https://rstudio.github.io/rstudioaddins/">RStudio add-in</a> by highlighting
+the pipeline to debug and then selecting “Debug pipeline in browser” from the
+“Addins” menu.</p>
+<p>Once called, <code>debug_pipeline</code> will reassemble the pipeline into a function that
+can be debugged in the browser and call the debugger. Each line adds another
+call from the pipeline and prints and the output so the user can see the status
+of the data passed through the pipeline by stepping through the function.</p>
+<p>The data is also stored to a variable called <code>dot[N]</code> in each line,
+where <code>[N]</code> is the index of the call, making it easy to compare input and
+output data of a step in the pipeline and try out new code formulations in the
+console.</p>
+<p>All together, it looks like this:</p>
+<pre class="r"><code>library(magrittr)
+library(pipecleaner)
+
+debug_pipeline(
+    1:5 %&gt;% 
+        rev() %&gt;% 
+        {. * 2} %&gt;% 
+        sample()
+)
+#&gt; debugging in: pipeline_function()
+#&gt; debug: {
+#&gt;     print(dot1 &lt;- 1:5)
+#&gt;     print(dot2 &lt;- 1:5 %&gt;% rev())
+#&gt;     print(dot3 &lt;- 1:5 %&gt;% rev() %&gt;% {
+#&gt;         . * 2
+#&gt;     })
+#&gt;     print(dot4 &lt;- 1:5 %&gt;% rev() %&gt;% {
+#&gt;         . * 2
+#&gt;     } %&gt;% sample())
+#&gt; }
+#&gt; debug: print(dot1 &lt;- 1:5)
+#&gt; [1] 1 2 3 4 5
+#&gt; debug: print(dot2 &lt;- 1:5 %&gt;% rev())
+#&gt; [1] 5 4 3 2 1
+#&gt; debug: print(dot3 &lt;- 1:5 %&gt;% rev() %&gt;% {
+#&gt;     . * 2
+#&gt; })
+#&gt; [1] 10  8  6  4  2
+#&gt; debug: print(dot4 &lt;- 1:5 %&gt;% rev() %&gt;% {
+#&gt;     . * 2
+#&gt; } %&gt;% sample())
+#&gt; [1]  2  8  6  4 10
+#&gt; exiting from: pipeline_function()</code></pre>
+</div>
+<div id="limitations" class="section level2">
+<h2>Limitations</h2>
+<p>pipecleaner should successfully debug most pipelines. However, due to its
+structure, it does have known limitations:</p>
+<ul>
+<li>It can only handle the <code>%&gt;%</code> pipe, not more exotic pipes like <code>%$%</code>. For the
+moment, this is unlikely to change, as accommodating varying pipes would
+require a more complicated approach.</li>
+<li>It cannot handle nested pipelines, e.g. piping within <code>dplyr::mutate</code>. This
+may be rectified eventually.</li>
+</ul>
+</div>
+<div id="related" class="section level2">
+<h2>Related</h2>
+<ul>
+<li><a href="https://github.com/daranzolin/ViewPipeSteps">ViewPipeSteps</a> is a similar
+project that calls <code>View()</code> after each step in the pipeline.</li>
+<li>magrittr itself contains <code>debug_pipe</code>, which is a wrapper around <code>browser</code>
+that returns its input, allowing it to be inserted within a pipeline.</li>
+</ul>
+</div>
+</div>

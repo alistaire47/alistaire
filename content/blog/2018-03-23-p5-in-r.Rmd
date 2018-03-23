@@ -1,0 +1,49 @@
+---
+title: p5 in R
+author: Edward Visel
+date: '2018-03-23'
+slug: p5-in-r
+type: post
+categories:
+  - R
+  - Processing
+  - dataviz
+tags:
+  - p5
+  - dataviz
+  - interactive graphics
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+[p5.js](https://p5js.org/) is a version of [Processing](https://processing.org/) 
+built natively in JavaScript. [It's really, really awesome.](http://hello.p5js.org/) 
+
+Sean Kross wrote R bindings for p5.js in his [p5](https://github.com/seankross/p5) 
+package so it can be written and R and published as an htmlwidget. This is a 
+little exploration of how it works.
+
+```{r, message=FALSE}
+library(p5)
+
+# runs once at start
+setup_ <- setup() %>% 
+    createCanvas(500, 500) %>% 
+    noStroke()
+
+# reruns every frame
+draw_ <- draw() %>% 
+    background('#888') %>% 
+    fill(rgb(1, 1, 1, 0.5)) %>% 
+    ellipse(~mouseX, ~height / 2, ~mouseY, ~mouseY) %>% 
+    fill(rgb(0, 0, 0, 0.5)) %>% 
+    ellipse(~width - mouseX, ~height / 2, ~width - mouseY, ~width - mouseY)
+
+sketch(setup = setup_, draw = draw_)
+```
+  
+<br />
+Adapted from Casey Reas and Ben Fry's ["Interactivity" Processing 
+tutorial](https://processing.org/tutorials/interactivity/) for p5 and R.

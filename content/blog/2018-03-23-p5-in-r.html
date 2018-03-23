@@ -1,0 +1,47 @@
+---
+title: p5 in R
+author: Edward Visel
+date: '2018-03-23'
+slug: p5-in-r
+type: post
+categories:
+  - R
+  - Processing
+  - dataviz
+tags:
+  - p5
+  - dataviz
+  - interactive graphics
+---
+
+<script src="/rmarkdown-libs/htmlwidgets/htmlwidgets.js"></script>
+<script src="/rmarkdown-libs/p5/p5.min.js"></script>
+<script src="/rmarkdown-libs/p5-binding/p5.js"></script>
+
+
+<p><a href="https://p5js.org/">p5.js</a> is a version of <a href="https://processing.org/">Processing</a>
+built natively in JavaScript. <a href="http://hello.p5js.org/">It’s really, really awesome.</a></p>
+<p>Sean Kross wrote R bindings for p5.js in his <a href="https://github.com/seankross/p5">p5</a>
+package so it can be written and R and published as an htmlwidget. This is a
+little exploration of how it works.</p>
+<pre class="r"><code>library(p5)
+
+# runs once at start
+setup_ &lt;- setup() %&gt;% 
+    createCanvas(500, 500) %&gt;% 
+    noStroke()
+
+# reruns every frame
+draw_ &lt;- draw() %&gt;% 
+    background(&#39;#888&#39;) %&gt;% 
+    fill(rgb(1, 1, 1, 0.5)) %&gt;% 
+    ellipse(~mouseX, ~height / 2, ~mouseY, ~mouseY) %&gt;% 
+    fill(rgb(0, 0, 0, 0.5)) %&gt;% 
+    ellipse(~width - mouseX, ~height / 2, ~width - mouseY, ~width - mouseY)
+
+sketch(setup = setup_, draw = draw_)</code></pre>
+<div id="p5-6127718295" style="width:672px;height:480px;" class="p5 html-widget"></div>
+<script type="application/json" data-for="p5-6127718295">{"x":{"section":"sketch","pre":";","setup":"p.setup = function() {\np.createCanvas(500,500,null);\np.noStroke();\n};","between":";","draw":"p.draw = function() {\np.background('#888');\np.fill('#FFFFFF80');\np.ellipse(p.mouseX,p.height/2,p.mouseY,p.mouseY);\np.fill('#00000080');\np.ellipse(p.width-p.mouseX,p.height/2,p.width-p.mouseY,p.width-p.mouseY);\n};","post":";","data":null,"fn":"ikvnbzylnr"},"evals":[],"jsHooks":[]}</script>
+<p><br />
+Adapted from Casey Reas and Ben Fry’s <a href="https://processing.org/tutorials/interactivity/">“Interactivity” Processing
+tutorial</a> for p5 and R.</p>

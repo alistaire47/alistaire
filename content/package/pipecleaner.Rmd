@@ -1,0 +1,24 @@
+---
+title: pipecleaner
+author: Edward Visel
+date: '2018-03-21'
+slug: pipecleaner
+description: "Debug magrittr pipelines"
+format: R
+type: itemized
+categories:
+  - R
+  - package
+tags:
+  - pipe
+  - magrittr
+  - debugging
+  - utility
+---
+
+For further information including complete documentation, see [pipecleaner's 
+full website](https://alistaire47.github.io/pipecleaner/).
+
+```{r, child="child-docs/pipecleaner-README.Rmd"}
+```
+

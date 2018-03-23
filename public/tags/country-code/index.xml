@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Country code on E. Visel</title>
+    <link>/tags/country-code/</link>
+    <description>Recent content in Country code on E. Visel</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 21 Mar 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="/tags/country-code/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>passport</title>
+      <link>/package/passport/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/package/passport/</guid>
+      <description>For further information including complete documentation, see passport’s full website.
+passport    
+passport smooths the process of working with country names and codes via powerful parsing, standardization, and conversion utilities arranged in a simple, consistent API. Country name formats include multiple sources including the Unicode CLDR common-sense standardizations in hundreds of languages.
+Installation Install from CRAN with
+install.packages(&amp;quot;passport&amp;quot;) or the development version from GitHub with
+# install.packages(&amp;quot;devtools&amp;quot;) devtools::install_github(&amp;quot;alistaire47/passport&amp;quot;)  Travel smoothly between country name and code formats Working with country data can be frustrating.</description>
+    </item>
+    
+  </channel>
+</rss>

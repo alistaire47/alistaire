@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tags on E. Visel</title>
+    <link>/tags/</link>
+    <description>Recent content in Tags on E. Visel</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 21 Mar 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="/tags/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Country</title>
+      <link>/tags/country/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/country/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Country code</title>
+      <link>/tags/country-code/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/country-code/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Country name</title>
+      <link>/tags/country-name/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/country-name/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Data frame</title>
+      <link>/tags/data-frame/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/data-frame/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Dataviz</title>
+      <link>/tags/dataviz/</link>
+      <pubDate>Fri, 23 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/dataviz/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Debugging</title>
+      <link>/tags/debugging/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/debugging/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Geometry</title>
+      <link>/tags/geometry/</link>
+      <pubDate>Fri, 23 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/geometry/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Interactive graphics</title>
+      <link>/tags/interactive-graphics/</link>
+      <pubDate>Fri, 23 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/interactive-graphics/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Magrittr</title>
+      <link>/tags/magrittr/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/magrittr/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Math</title>
+      <link>/tags/math/</link>
+      <pubDate>Fri, 23 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/math/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>P5</title>
+      <link>/tags/p5/</link>
+      <pubDate>Fri, 23 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/p5/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Pipe</title>
+      <link>/tags/pipe/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/pipe/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Print</title>
+      <link>/tags/print/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/print/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>R</title>
+      <link>/tags/r/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/r/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Stack overflow</title>
+      <link>/tags/stack-overflow/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/stack-overflow/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Utility</title>
+      <link>/tags/utility/</link>
+      <pubDate>Wed, 21 Mar 2018 00:00:00 +0000</pubDate>
+      
+      <guid>/tags/utility/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,23 @@
+---
+title: read.so
+author: Edward Visel
+date: '2018-03-21'
+slug: read-so
+type: itemized
+description: "Read tables from Stack Overflow questions into R"
+format: R
+categories:
+  - R
+  - package
+tags:
+  - stack overflow
+  - print
+  - data frame
+---
+
+For further information including complete documentation, see [read.so's full 
+website](https://alistaire47.github.io/read.so/).
+
+```{r, child="child-docs/read-so-README.Rmd"}
+```
+

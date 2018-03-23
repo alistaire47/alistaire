@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>R on E. Visel</title>
+    <link>/tags/r/</link>
+    <description>Recent content in R on E. Visel</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    
+	<atom:link href="/tags/r/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title></title>
+      <link>/package/child-docs/passport-readme/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/package/child-docs/passport-readme/</guid>
+      <description>passport    
+passport smooths the process of working with country names and codes via powerful parsing, standardization, and conversion utilities arranged in a simple, consistent API. Country name formats include multiple sources including the Unicode CLDR common-sense standardizations in hundreds of languages.
+Installation Install from CRAN with
+install.packages(&amp;quot;passport&amp;quot;) or the development version from GitHub with
+# install.packages(&amp;quot;devtools&amp;quot;) devtools::install_github(&amp;quot;alistaire47/passport&amp;quot;)  Travel smoothly between country name and code formats Working with country data can be frustrating.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>/package/child-docs/pipecleaner-readme/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/package/child-docs/pipecleaner-readme/</guid>
+      <description>pipecleaner     
+pipecleaner is a utility R package to debug pipelines using the magrittr %&amp;gt;% pipe. Its debug_pipeline launches the debugging browser on the input pipeline in a form that allows the user to step through the successive calls of the pipeline, examining the output of each successive element.
+Installation pipecleaner is not currently on CRAN, but can be installed with
+# install.packages(&amp;quot;devtools&amp;quot;) devtools::install_github(&amp;quot;alistaire47/pipecleaner&amp;quot;)  Debugging pipelines To debug a pipeline, call debug_pipeline on the raw code or a character string of the code.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>/package/child-docs/read-so-readme/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/package/child-docs/read-so-readme/</guid>
+      <description>read.so    
+Installation read.so is not on CRAN, but you can install it with
+# install.packages(&amp;quot;devtools&amp;quot;) devtools::install_github(&amp;quot;alistaire47/read.so&amp;quot;)  Read Tables from Stack Overflow Questions into R Sometimes you see a really interesting question on Stack Overflow, but the asker only presents the data as a presentation-style table instead of as runnable R code. Fear no more! read.so will read even heinous tables into a data frame in a trice.</description>
+    </item>
+    
+  </channel>
+</rss>
