@@ -1,5 +1,5 @@
 This is my personal website and blog, currently deployed at 
-[https://alistaire.netlify.com/](https://alistaire.netlify.com/).
+[https://alistaire.rbind.io/](https://alistaire.rbind.io/).
 
 Built with:
 
@@ -7,6 +7,7 @@ Built with:
 * [blogdown](https://bookdown.org/yihui/blogdown/)
 * [hugo](https://gohugo.io/)
 * [Future Imperfect](https://github.com/jpescador/hugo-future-imperfect)
-* [netlify](https://www.netlify.com/).
+* [netlify](https://www.netlify.com/)
+* [rbind.io](https://support.rbind.io/about/)
 
 Feel free to coopt any bits you like.
