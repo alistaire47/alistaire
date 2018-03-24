@@ -6,7 +6,7 @@ Built with:
 * [R](https://www.r-project.org/)
 * [blogdown](https://bookdown.org/yihui/blogdown/)
 * [hugo](https://gohugo.io/)
-* [Future Imperfect](https://alistaire.netlify.com/)
+* [Future Imperfect](https://github.com/jpescador/hugo-future-imperfect)
 * [netlify](https://www.netlify.com/).
 
 Feel free to coopt any bits you like.
