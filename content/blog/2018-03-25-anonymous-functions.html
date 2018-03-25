@@ -1,0 +1,199 @@
+---
+title: Anonymous Functions, Not Variables
+description: "Use the LHS of a formula to specify variable names in purrr-style lambda functions"
+author: Edward Visel
+date: '2018-03-25'
+slug: anonymous-functions
+type: post
+categories:
+  - R
+  - programming
+tags:
+  - functions
+  - purrr
+  - rlang
+---
+
+
+
+<p>I am a very heavy <a href="https://github.com/tidyverse/purrr">purrr</a> user. The killer
+feature is clearly <code>map_df</code> (fairly recently rebranded as <code>map_dfr</code> and
+<code>map_dfc</code> for row and column binding, respectively) to iterate over a list à la
+<code>lapply</code> and simplify the result to a data frame. Thanks to the power of
+<code>dplyr::bind_rows</code>, it fixes all the drawbacks of <code>sapply</code>’s <code>simplify2array</code>
+behavior:</p>
+<ul>
+<li>It returns a data frame, not a matrix or array, so multiple types can be
+kept. Never see a matrix of lists again.</li>
+<li>Variables are aligned by names, not locations, and thus will not be recycled
+to locations they do not belong, and <code>NA</code>s will be inserted as appropriate.</li>
+<li>Turning the list names into a column is as simple as passing a name for it to
+the <code>.id</code> parameter.</li>
+</ul>
+<p>Along with tidyr’s <code>gather</code> and <code>spread</code>, <code>map_df</code> is indispensable for me—to
+do without would mean a lot of <code>do.call(rbind, ...)</code> that can go very wrong
+without warning.</p>
+<p>purrr has lots of other lovely functions, too, like <code>transpose</code>, <code>partial</code>, and
+<code>cross</code> that are well worth learning. At the core of its functional programming
+abilities, though, is <code>as_mapper</code>, a function unlikely to be called much
+directly, but which is called by every <code>map</code> variant to decide what to do with
+the <code>.f</code> and <code>...</code> parameters, which may either be parameters for subsetting
+each element or a function, possibly with additional parameters. In the latter
+case, <code>purrr:::as_mapper.default</code> is [now] simply a wrapper for
+<code>rlang::as_closure</code>.</p>
+<p>This function enables one of purrr’s far-reaching conveniences: the ability to
+define anonymous functions with formulas. In its most basic format, e.g. a
+unary function for <code>map</code>, <code>function(x) as.character(x)</code> can be rewritten as
+<code>~as.character(.x)</code>. The <code>~</code> both quotes the function, and can be read for the
+unary case as <code>function(.x)</code>.</p>
+<p>For unary functions, the input can be referred to as <code>.x</code>, just <code>.</code> (which I
+generally avoid to eliminate confusion with data piped in), or <code>..1</code>, since it
+is the first parameter. For binary functions like those for <code>map2</code> or <code>reduce</code>,
+the inputs are typically referred to as <code>.x</code> and <code>.y</code> (though the first behaves
+the same as that of a unary function, and the second, as such, can also be
+referred to as <code>..2</code>). For a polyadic function like that for <code>pmap</code>, the
+parameters are input as <code>...</code>, which can be collected, e.g. <code>params = list(...)</code>, or accessed directly by number with <code>..1</code>, <code>..2</code>, etc. notation as
+usual.</p>
+<p>While this notation has a small learning curve, the convenience when composing
+anonymous functions adds up. Keystrokes are saved. Less noticeably but perhaps
+more importantly, the mental effort of naming parameters is eliminated. (“Did I
+call something <code>x</code> already?”)</p>
+<p>This is all very good. However, there are limitations. In particular, nested
+calls with this notation will typically not work, because the variable is called
+the same thing, e.g.</p>
+<pre class="r"><code>library(purrr)
+
+map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    ~map_chr(1:3, 
+         ~paste0(.x, .x))) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;11&quot; &quot;22&quot; &quot;33&quot;
+#&gt;  $ : chr [1:3] &quot;11&quot; &quot;22&quot; &quot;33&quot;
+#&gt;  $ : chr [1:3] &quot;11&quot; &quot;22&quot; &quot;33&quot;</code></pre>
+<p>Assuming such a case where double iteration is necessary and cannot be
+vectorized away<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a>, there is simply no convenient way to write
+this code with this notation. If the function is supposed to be passed to the
+first parameter of one of the functions, an alternative is to pass the function
+and other parameters separately, e.g.</p>
+<pre class="r"><code>map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    ~map_chr(1:3, 
+             paste0, 
+             .x)) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;1a&quot; &quot;2a&quot; &quot;3a&quot;
+#&gt;  $ : chr [1:3] &quot;1b&quot; &quot;2b&quot; &quot;3b&quot;
+#&gt;  $ : chr [1:3] &quot;1c&quot; &quot;2c&quot; &quot;3c&quot;</code></pre>
+<p>but this gets hard to read, and the order cannot be reversed without flipping
+the loops, which may be impractical or impossible. Thus, the alternative is to
+fall back to standard anonymous function notation so as to specify different
+names for each parameter:</p>
+<pre class="r"><code>map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    function(x) {
+        map_chr(1:3, function(y) paste0(x, y))
+    }) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;a1&quot; &quot;a2&quot; &quot;a3&quot;
+#&gt;  $ : chr [1:3] &quot;b1&quot; &quot;b2&quot; &quot;b3&quot;
+#&gt;  $ : chr [1:3] &quot;c1&quot; &quot;c2&quot; &quot;c3&quot;</code></pre>
+<p>This works, but loses a lot of convenience for the sake of avoiding a name clash.
+But I think there is a better way.</p>
+<p>The functions in question are <a href="https://en.wikipedia.org/wiki/Anonymous_function">anonymous
+functions</a>, i.e. they are not
+assigned to a name, but are rather raw expressions that define a function. In R,
+the most common usage of such functions (sometimes called <em>lambda expressions</em>
+due to their origins in Alonzo Church’s <a href="https://en.wikipedia.org/wiki/Lambda_calculus">lambda
+calculus</a>) is when passing a
+function as a parameter to a function like <code>map</code>. Since their introduction in
+Lisp, anonymous functions have become a part of most modern programming
+languages. Syntax differs, of course; for example in Racket, a modern Lisp:</p>
+<pre class="racket"><code>((lambda (x) 
+  (* x x)) 
+ 2)
+#&gt; 4</code></pre>
+<p>or Python:</p>
+<pre class="python"><code>(lambda x: print(x * x))(2)
+#&gt; 4</code></pre>
+<p>or Julia:</p>
+<pre class="julia"><code>((x) -&gt; x * x)(2)
+#&gt; 4</code></pre>
+<p>or R:</p>
+<pre class="r"><code>(function(x) x * x)(2)
+#&gt; [1] 4</code></pre>
+<p>Comparing these syntaxes to that of purrr’s anonymous functions, a disadvantage
+of the latter becomes apparent: there is no way to specify parameter names,
+which is why nested evaluation is impossible. That said, given both a notation
+like that of Julia above and how models in R use formula notation, it seems
+plausible that variable names could be specified on the otherwise unused
+left-hand side (LHS) of a formula function.<a href="#fn2" class="footnote-ref" id="fnref2"><sup>2</sup></a>
+Multiple variables cannot be separated by commas (which would terminate the
+formula), but could be separated by <code>+</code>, like multiple terms in a regression.</p>
+<p>To build such capability, let’s use <a href="https://github.com/tidyverse/rlang">rlang</a>,
+which has handy utilities for parsing and creating formulas and functions.</p>
+<ul>
+<li>The variable names can be parsed from the LHS (returned as an expression by
+<code>f_lhs</code>) with <code>base::all.vars</code>, which takes an expression and returns a
+character vector of variables it uses.</li>
+<li>The function can be created with <code>new_function</code>, which requires
+<ul>
+<li>the parameters, passed as a named list. Since there should be no defaults,
+the <code>args</code> parameter should be a list with named empty elements. For known
+inputs, such a list can be created with <code>alist</code>, e.g. <code>alist(x = , y = )</code>,
+but because of its quoting semantics, it is very difficult to program with.
+A suitable list can be generated by simply making a list of empty
+expressions, though.</li>
+<li>the body, which is simply the right-hand side of the formula, extracted
+with <code>f_rhs</code>, and</li>
+<li>the environment. Formulas, like functions, have environments, which can be
+accessed with <code>f_env</code>.</li>
+</ul></li>
+</ul>
+<p>All together,</p>
+<pre class="r"><code>library(rlang)
+
+lambda &lt;- function(x){
+    arg_names &lt;- all.vars(f_lhs(x))
+    new_function(args = set_names(rep(list(expr()), 
+                                      length(arg_names)), 
+                                  arg_names), 
+                 body = f_rhs(x), 
+                 env = f_env(x))
+}</code></pre>
+<p>Now we can write formula functions in a fashion fully equivalent to ordinary
+ones, e.g.</p>
+<pre class="r"><code>lambda(x ~ x * x)
+#&gt; function (x) 
+#&gt; x * x
+
+lambda(x ~ x * x)(2)
+#&gt; [1] 4</code></pre>
+<p>It works for multiple parameters, too:</p>
+<pre class="r"><code>lambda(x + na.rm ~ mean(x, na.rm = na.rm))(c(1, NA, 3), na.rm = TRUE)
+#&gt; [1] 2</code></pre>
+<p>Now, in the original nested <code>map</code> example,</p>
+<pre class="r"><code>map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    lambda(x ~ map_chr(1:3, 
+                       lambda(y ~ paste0(x, y))))) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;a1&quot; &quot;a2&quot; &quot;a3&quot;
+#&gt;  $ : chr [1:3] &quot;b1&quot; &quot;b2&quot; &quot;b3&quot;
+#&gt;  $ : chr [1:3] &quot;c1&quot; &quot;c2&quot; &quot;c3&quot;</code></pre>
+<p>Ideally, it would be nice to drop the <code>lambda</code> call altogether, but as far as I
+have been able to find, the only way to do so would be to redefine
+<code>purrr:::as_mapper.default</code> to call <code>lambda</code> instead of <code>rlang::as_closure</code>
+when passed a formula with anything on the left-hand side.</p>
+<p>For now, then, extra keystrokes abide.</p>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>Here, <code>outer(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 1:3, paste0)</code>, though that does
+return a matrix instead of a list.<a href="#fnref1" class="footnote-back">↩</a></p></li>
+<li id="fn2"><p>The fascinating magrittr
+alternative <a href="https://github.com/renkun-ken/pipeR">pipeR</a> implements <a href="https://renkun-ken.github.io/pipeR-tutorial/Pipe-operator/Pipe-by-formula.html">something
+of the sort for naming data piped into a
+function</a>.<a href="#fnref2" class="footnote-back">↩</a></p></li>
+</ol>
+</div>

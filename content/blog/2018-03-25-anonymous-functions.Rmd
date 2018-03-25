@@ -1,0 +1,232 @@
+---
+title: Anonymous Functions, Not Variables
+description: "Use the LHS of a formula to specify variable names in purrr-style lambda functions"
+author: Edward Visel
+date: '2018-03-25'
+slug: anonymous-functions
+type: post
+categories:
+  - R
+  - programming
+tags:
+  - functions
+  - purrr
+  - rlang
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+knitr::knit_engines$set(racket = function(options){
+    engine = options$engine
+    code = paste("-e", shQuote(paste(options$code, collapse = "\n")))
+    code = paste(options$engine.opts, code)
+    cmd = system('which racket', intern = TRUE)
+    out = if (options$eval) {
+        message("running: ", cmd, " ", code)
+        tryCatch(system2(cmd, code, stdout = TRUE, stderr = TRUE, 
+            env = options$engine.env), error = function(e) {
+            if (!options$error) 
+                stop(e)
+            paste("Error in running command", cmd)
+        })
+    } else ""
+    if (!options$error && !is.null(attr(out, "status"))) 
+        stop(paste(out, collapse = "\n"))
+    knitr::engine_output(options, options$code, out)
+})
+```
+
+I am a very heavy [purrr](https://github.com/tidyverse/purrr) user. The killer 
+feature is clearly `map_df` (fairly recently rebranded as `map_dfr` and 
+`map_dfc` for row and column binding, respectively) to iterate over a list à la 
+`lapply` and simplify the result to a data frame. Thanks to the power of 
+`dplyr::bind_rows`, it fixes all the drawbacks of `sapply`'s `simplify2array` 
+behavior:
+
+* It returns a data frame, not a matrix or array, so multiple types can be 
+  kept. Never see a matrix of lists again.
+* Variables are aligned by names, not locations, and thus will not be recycled 
+  to locations they do not belong, and `NA`s will be inserted as appropriate.
+* Turning the list names into a column is as simple as passing a name for it to 
+  the `.id` parameter.
+  
+Along with tidyr's `gather` and `spread`, `map_df` is indispensable for me—to 
+do without would mean a lot of `do.call(rbind, ...)` that can go very wrong 
+without warning.
+
+purrr has lots of other lovely functions, too, like `transpose`, `partial`, and 
+`cross` that are well worth learning. At the core of its functional programming 
+abilities, though, is `as_mapper`, a function unlikely to be called much 
+directly, but which is called by every `map` variant to decide what to do with 
+the `.f` and `...` parameters, which may either be parameters for subsetting 
+each element or a function, possibly with additional parameters. In the latter 
+case, `purrr:::as_mapper.default` is [now] simply a wrapper for 
+`rlang::as_closure`.
+
+This function enables one of purrr's far-reaching conveniences: the ability to 
+define anonymous functions with formulas. In its most basic format, e.g. a 
+unary function for `map`, `function(x) as.character(x)` can be rewritten as 
+`~as.character(.x)`. The `~` both quotes the function, and can be read for the 
+unary case as `function(.x)`. 
+
+For unary functions, the input can be referred to as `.x`, just `.` (which I
+generally avoid to eliminate confusion with data piped in), or `..1`, since it
+is the first parameter. For binary functions like those for `map2` or `reduce`,
+the inputs are typically referred to as `.x` and `.y` (though the first behaves
+the same as that of a unary function, and the second, as such, can also be
+referred to as `..2`). For a polyadic function like that for `pmap`, the
+parameters are input as `...`, which can be collected, e.g. `params =
+list(...)`, or accessed directly by number with `..1`, `..2`, etc. notation as
+usual.
+
+While this notation has a small learning curve, the convenience when composing 
+anonymous functions adds up. Keystrokes are saved. Less noticeably but perhaps 
+more importantly, the mental effort of naming parameters is eliminated. ("Did I 
+call something `x` already?")
+
+This is all very good. However, there are limitations. In particular, nested 
+calls with this notation will typically not work, because the variable is called 
+the same thing, e.g.
+
+```{r}
+library(purrr)
+
+map(c("a", "b", "c"), 
+    ~map_chr(1:3, 
+         ~paste0(.x, .x))) %>% 
+    str()
+```
+Assuming such a case where double iteration is necessary and cannot be
+vectorized away^[Here, `outer(c("a", "b", "c"), 1:3, paste0)`, though that does
+return a matrix instead of a list.], there is simply no convenient way to write
+this code with this notation. If the function is supposed to be passed to the
+first parameter of one of the functions, an alternative is to pass the function
+and other parameters separately, e.g.
+
+```{r}
+map(c("a", "b", "c"), 
+    ~map_chr(1:3, 
+             paste0, 
+             .x)) %>% 
+    str()
+```
+but this gets hard to read, and the order cannot be reversed without flipping 
+the loops, which may be impractical or impossible. Thus, the alternative is to 
+fall back to standard anonymous function notation so as to specify different 
+names for each parameter:
+
+```{r}
+map(c("a", "b", "c"), 
+    function(x) {
+        map_chr(1:3, function(y) paste0(x, y))
+    }) %>% 
+    str()
+```
+This works, but loses a lot of convenience for the sake of avoiding a name clash. 
+But I think there is a better way.
+
+The functions in question are [anonymous
+functions](https://en.wikipedia.org/wiki/Anonymous_function), i.e. they are not
+assigned to a name, but are rather raw expressions that define a function. In R,
+the most common usage of such functions (sometimes called _lambda expressions_
+due to their origins in Alonzo Church's [lambda
+calculus](https://en.wikipedia.org/wiki/Lambda_calculus)) is when passing a
+function as a parameter to a function like `map`. Since their introduction in
+Lisp, anonymous functions have become a part of most modern programming
+languages. Syntax differs, of course; for example in Racket, a modern Lisp:
+
+```{racket}
+((lambda (x) 
+  (* x x)) 
+ 2)
+```
+
+or Python:
+```{python}
+(lambda x: print(x * x))(2)
+```
+
+or Julia:
+```{julia}
+((x) -> x * x)(2)
+```
+
+or R:
+```{r}
+(function(x) x * x)(2)
+```
+
+Comparing these syntaxes to that of purrr's anonymous functions, a disadvantage
+of the latter becomes apparent: there is no way to specify parameter names,
+which is why nested evaluation is impossible. That said, given both a notation
+like that of Julia above and how models in R use formula notation, it seems
+plausible that variable names could be specified on the otherwise unused
+left-hand side (LHS) of a formula function.^[The fascinating magrittr
+alternative [pipeR](https://github.com/renkun-ken/pipeR) implements [something
+of the sort for naming data piped into a 
+function](https://renkun-ken.github.io/pipeR-tutorial/Pipe-operator/Pipe-by-formula.html).]
+Multiple variables cannot be separated by commas (which would terminate the
+formula), but could be separated by `+`, like multiple terms in a regression.
+
+To build such capability, let's use [rlang](https://github.com/tidyverse/rlang), 
+which has handy utilities for parsing and creating formulas and functions. 
+
+* The variable names can be parsed from the LHS (returned as an expression by 
+  `f_lhs`) with `base::all.vars`, which takes an expression and returns a 
+  character vector of variables it uses.
+* The function can be created with `new_function`, which requires
+  * the parameters, passed as a named list. Since there should be no defaults, 
+    the `args` parameter should be a list with named empty elements. For known 
+    inputs, such a list can be created with `alist`, e.g. `alist(x = , y = )`, 
+    but because of its quoting semantics, it is very difficult to program with. 
+    A suitable list can be generated by simply making a list of empty 
+    expressions, though.
+  * the body, which is simply the right-hand side of the formula, extracted 
+    with `f_rhs`, and 
+  * the environment. Formulas, like functions, have environments, which can be 
+    accessed with `f_env`.
+    
+All together,
+
+```{r lambda, message=FALSE}
+library(rlang)
+
+lambda <- function(x){
+    arg_names <- all.vars(f_lhs(x))
+    new_function(args = set_names(rep(list(expr()), 
+                                      length(arg_names)), 
+                                  arg_names), 
+                 body = f_rhs(x), 
+                 env = f_env(x))
+}
+```
+
+Now we can write formula functions in a fashion fully equivalent to ordinary 
+ones, e.g.
+```{r}
+lambda(x ~ x * x)
+
+lambda(x ~ x * x)(2)
+```
+
+It works for multiple parameters, too:
+```{r}
+lambda(x + na.rm ~ mean(x, na.rm = na.rm))(c(1, NA, 3), na.rm = TRUE)
+```
+
+Now, in the original nested `map` example, 
+```{r}
+map(c("a", "b", "c"), 
+    lambda(x ~ map_chr(1:3, 
+                       lambda(y ~ paste0(x, y))))) %>% 
+    str()
+```
+
+Ideally, it would be nice to drop the `lambda` call altogether, but as far as I 
+have been able to find, the only way to do so would be to redefine 
+`purrr:::as_mapper.default` to call `lambda` instead of `rlang::as_closure` 
+when passed a formula with anything on the left-hand side.
+
+For now, then, extra keystrokes abide.
+
+
