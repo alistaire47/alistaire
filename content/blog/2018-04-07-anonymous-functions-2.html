@@ -1,0 +1,89 @@
+---
+title: 'Anonymous Functions, Part II: gsubfn'
+description: "gsubfn's as.function and fn$* notation"
+author: Edward Visel
+date: '2018-04-07'
+slug: anonymous-functions-2
+type: post
+categories:
+  - R
+  - programming
+tags:
+  - functions
+  - r
+  - package
+---
+
+
+
+<p><em>This is a follow-up to</em> <a href="blog/anonymous-functions">Anonymous Functions, Not Variables</a>.
+<em>For context, read that first.</em></p>
+<p>After my previous post, Brodie Gaslam pointed me in an interesting direction on
+Twitter:</p>
+{{% tweet "978250706707779585" %}}
+<p>He’s right. <a href="https://cran.r-project.org/web/packages/gsubfn/index.html">Gabor Grothendieck’s gsubfn
+package</a> is centered
+around its <code>gsubfn</code> function, an extended version of <code>gsub</code> whose <code>replacement</code>
+parameter can accept functions, e.g. to do arithmetic with numbers in a string.</p>
+<p>That anonymous function can be written as a formula, a capability enabled by a
+<code>as.function.formula</code> function which is also exported. It provides very similar
+functionality to the <code>lambda</code> function I defined, so the nested <code>map</code> example
+could be written</p>
+<pre class="r"><code>library(purrr)
+
+map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    gsubfn::as.function.formula(x ~ map_chr(1:3, 
+                            gsubfn::as.function.formula(y ~ paste0(x, y))))) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;a1&quot; &quot;a2&quot; &quot;a3&quot;
+#&gt;  $ : chr [1:3] &quot;b1&quot; &quot;b2&quot; &quot;b3&quot;
+#&gt;  $ : chr [1:3] &quot;c1&quot; &quot;c2&quot; &quot;c3&quot;</code></pre>
+<p>As it appears, it is a method for the S3 generic <code>base::as.function</code>, so when
+gsubfn is loaded, the syntax can be condensed to</p>
+<pre class="r"><code>library(gsubfn)
+#&gt; Loading required package: proto
+
+map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+    as.function(x ~ map_chr(1:3, 
+                            as.function(y ~ paste0(x, y))))) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;a1&quot; &quot;a2&quot; &quot;a3&quot;
+#&gt;  $ : chr [1:3] &quot;b1&quot; &quot;b2&quot; &quot;b3&quot;
+#&gt;  $ : chr [1:3] &quot;c1&quot; &quot;c2&quot; &quot;c3&quot;</code></pre>
+<p>and the generic will dispatch to it when passed a formula.</p>
+<p>The best part of <code>gsubfn::as.function.formula</code>, though, is the alternative way
+it can be called. At the end of the previous post, I concluded</p>
+<blockquote>
+<p>Ideally, it would be nice to drop the <code>lambda</code> call altogether, but as far as
+I have been able to find, the only way to do so would be to redefine
+<code>purrr:::as_mapper.default</code> to call <code>lambda</code> instead of <code>rlang::as_closure</code>
+when passed a formula with anything on the left-hand side.</p>
+<p>For now, then, extra keystrokes abide.</p>
+</blockquote>
+<p>But <code>gsubfn</code> has found a clever way to minimize keystrokes. It defines an <code>fn</code>
+object with its own class. That class has a method for <code>$</code> that is rather
+different than its usual subsetting duties. Instead, it takes a call with a
+formula in it, and returns that call with the formula converted to a function
+by <code>as.function.formula</code> (with some safeguards to ignore actual formulas). So
+while it looks a little weird, at first, you can write</p>
+<pre class="r"><code>fn$sapply(1:3, 
+          i ~ paste0(letters[i], i))
+#&gt; [1] &quot;a1&quot; &quot;b2&quot; &quot;c3&quot;
+
+fn$map2_chr(letters[1:3], 
+            1:3, 
+            l + n ~ paste0(l, n))
+#&gt; [1] &quot;a1&quot; &quot;b2&quot; &quot;c3&quot;</code></pre>
+<p>or for the nested <code>map</code> example,</p>
+<pre class="r"><code>fn$map(c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;), 
+       x ~ fn$map_chr(1:3, 
+                      y ~ paste0(x, y))) %&gt;% 
+    str()
+#&gt; List of 3
+#&gt;  $ : chr [1:3] &quot;a1&quot; &quot;a2&quot; &quot;a3&quot;
+#&gt;  $ : chr [1:3] &quot;b1&quot; &quot;b2&quot; &quot;b3&quot;
+#&gt;  $ : chr [1:3] &quot;c1&quot; &quot;c2&quot; &quot;c3&quot;</code></pre>
+<p>effectively modifying functions on the fly to accept full formula lambda
+notation in a beautiful bit of code.</p>
