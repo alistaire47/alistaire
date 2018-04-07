@@ -227,6 +227,7 @@ have been able to find, the only way to do so would be to redefine
 `purrr:::as_mapper.default` to call `lambda` instead of `rlang::as_closure` 
 when passed a formula with anything on the left-hand side.
 
-For now, then, extra keystrokes abide.
+For now, then, extra keystrokes abide.^[Maybe not all of them; see 
+[Part 2: gsubfn](/blog/anonymous-functions-2).]
 
 

@@ -185,7 +185,7 @@ lambda(x ~ x * x)(2)
 have been able to find, the only way to do so would be to redefine
 <code>purrr:::as_mapper.default</code> to call <code>lambda</code> instead of <code>rlang::as_closure</code>
 when passed a formula with anything on the left-hand side.</p>
-<p>For now, then, extra keystrokes abide.</p>
+<p>For now, then, extra keystrokes abide.<a href="#fn3" class="footnote-ref" id="fnref3"><sup>3</sup></a></p>
 <div class="footnotes">
 <hr />
 <ol>
@@ -195,5 +195,7 @@ return a matrix instead of a list.<a href="#fnref1" class="footnote-back">↩</a
 alternative <a href="https://github.com/renkun-ken/pipeR">pipeR</a> implements <a href="https://renkun-ken.github.io/pipeR-tutorial/Pipe-operator/Pipe-by-formula.html">something
 of the sort for naming data piped into a
 function</a>.<a href="#fnref2" class="footnote-back">↩</a></p></li>
+<li id="fn3"><p>Maybe not all of them; see
+<a href="/blog/anonymous-functions-2">Part 2: gsubfn</a>.<a href="#fnref3" class="footnote-back">↩</a></p></li>
 </ol>
 </div>
