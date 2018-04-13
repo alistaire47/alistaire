@@ -21,7 +21,8 @@ knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
 _This is a follow-up to_ [Anonymous Functions, Not Variables](blog/anonymous-functions). 
 _For context, read that first._
 
----
+
+***
 
 After my previous post, Brodie Gaslam pointed me in an interesting direction on 
 Twitter:
