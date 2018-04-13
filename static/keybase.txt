@@ -1,0 +1,75 @@
+==================================================================
+https://keybase.io/alistaire
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://alistaire.rbind.io
+  * I am alistaire (https://keybase.io/alistaire) on keybase.
+  * I have a public key with fingerprint 27C3 EE0C 425B DB4D 1A3B  FA4C 6269 3D22 2225 F785
+
+To do so, I am signing this object:
+
+{
+  "body": {
+    "key": {
+      "eldest_kid": "0120bb53f42b0444d9c5c19e5a5e1b6b2879f1e3888cd87286e604e0bfdde5f9313d0a",
+      "fingerprint": "27c3ee0c425bdb4d1a3bfa4c62693d222225f785",
+      "host": "keybase.io",
+      "key_id": "62693d222225f785",
+      "kid": "010125ae7118c630b0b7351d02337d4f56491d319f5fb937407f391bedb11a3d277a0a",
+      "uid": "2e8a52be0acd3c4667ad659735b03919",
+      "username": "alistaire"
+    },
+    "service": {
+      "hostname": "alistaire.rbind.io",
+      "protocol": "https:"
+    },
+    "type": "web_service_binding",
+    "version": 1
+  },
+  "ctime": 1523663524,
+  "expire_in": 157680000,
+  "prev": "9c9ab7cc83d0c5cfafa5eca98fc7a21cf342a68455f11683b2b1b5da933a1c44",
+  "seqno": 11,
+  "tag": "signature"
+}
+
+which yields the signature:
+
+-----BEGIN PGP MESSAGE-----
+Version: Keybase OpenPGP v2.0.76
+Comment: https://keybase.io/crypto
+
+yMNqAnicbVJ7UBVVHL4QdINiIHrZmMasvAy87e7Z5+2KBKRJ9tCmmQaIO+fsnoXl
+ce/13oUkBiwSwyiwaDAwJQhMKF8DoUSZyCOQhByMMWkcIx5jDZCAwQxp7VL+03T+
+OXN+5/u+3/d7dAXcYfL3Qup6gghbKPbq76jJMSVdiKvPJ5BTziOs+UQmXr5wlow9
+mj1TlQkrQVI0iRALFIZGJMMwsiixEiViFrKYQhyiBV5UKAwEQZBkgacFDnMkg0mk
+yDJmFRFQQCYhEU0oqiMNu11u1aHpsjQvAYxJiaFZJCNGpiBACmQkjuZEINPGYRVe
+YHViutNjMHRzCHqwRXXqMf1hX7b3P/jbvnXnLMQ8RQkSB0hEIh6wlEzSAPAyo7Ac
+I1IyoESFVZAIeIbkFSBSCMuI0s3INM/DZd85y3I0FiBLI0xCSQYSw3E8lDlW1CUR
+qdNEA+jBbgfMxjoaZqkeDapuTBREE3o4V5Ww0VmjlP9CLG6kOuR/ynK5nZpTcmbp
+/+ma5vJYDb6W5zIIr2Jk/1fKbjD0duqMXOz2qE4HYaV0pKSphjbF0oDjAEsz0QTe
+4dJz2FUDwfKcQOrHyINzdUlREiHiJUnQR6RPVYGKPlQJioIi8ZCmJAUwNOQEhmUV
+iuIEgGhEIVaGIgCQkhiGMIrb7nDq2pTuE6bpmh41zQG1HKP0sx0pPiYvf9Odvt7G
+npn8/YJub9/ii0Gmr+N7mt8DyePj59/IHgk00zvHvFbThyfLSxLWntvabEu5O71o
+70LjzdIVFd1rpqqS9wf+umSeSG8Ao8Eo1vTH9vOpRYNpF475TlyujBxQwwfPiL3m
+JEtUX3uWPa7FcrLON+ztlpPcu864+SeOFPxSLB25GNu5MiKm76PEzh9efvrqfdNX
+ptelfC4TC4Vbpp/UIht9K+zfl2986Ubvia/2VT0+NvVXRPyf3n5ysW2H57g0FlgG
+U4vEwexXtvl+YPv2/UrvT7V+8mjZZ43fha4eS604pcwGj/dcHenIn/ip5LoL3Xqk
+hWwJODP0wNLzu/qjJp/NOKtZ4u/RdjcKB3I39RwIeKssrZvY27pnwHY48dKq0N65
+5pAHJ6uemgirO6TdaJ+Zeg5b9icN5+/zqX5sa3fhF6VdVtfF8t+uL52zhW8jX7sS
+GlFdXTv3e/SG2RdqXXOh3Dt17W0fNh9sW5yfrdlcc+KhNamDhVuObki8OVEyMrP5
+VmlTRki9+1G0qcp8/GPTm3L+abHE6V430DsflTC8s6Lt2OmMlYs/1vsXxNRe25gc
+vcsTa26MCCKtMbMQJrRaK5s+SW4YCm/oBKP3ds+uj2tuTXdE2kPknsK86urEubXh
+3XWvO8xxyjctwbubLt1fOZo0NHwwNjVQ+7kvwGY55DfTdVffqQ6fyL5nHl5xWVhF
+ZuZ+eS1oaPxv1+fGsA==
+=7PSB
+-----END PGP MESSAGE-----
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/alistaire
+
+==================================================================
