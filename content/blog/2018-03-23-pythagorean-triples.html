@@ -209,6 +209,7 @@ the parity of <span class="math inline">\(a\)</span> to show some differentiatio
 #&gt; ── Conflicts ──────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
 #&gt; ✖ dplyr::filter() masks stats::filter()
 #&gt; ✖ dplyr::lag()    masks stats::lag()
+#&gt; ✖ dplyr::vars()   masks ggplot2::vars()
 
 plot_triples &lt;- function(aes, 
                          ylab = rlang::quo_name(aes$y), 

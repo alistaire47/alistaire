@@ -1,0 +1,391 @@
+---
+title: 'Bayesian Regression'
+description: 'greta and stan go for a walk'
+author: Edward Visel
+date: '2018-04-16'
+slug: bayesian-regression
+featured: "bayes.png"
+featuredalt: "bayesian regression lines"
+featuredpath: "date"
+type: post
+categories:
+  - R
+  - statistics
+  - bayes
+tags:
+  - greta
+  - stan
+  - statistics
+  - bayes
+  - mcmc
+  - r
+---
+
+
+
+<p>I have been working on my Bayesian statistics skills recently. In particular, I
+have been reading David Robinson’s lovely
+<a href="https://gumroad.com/l/empirical-bayes"><em>Introduction to Empirical Bayes: Examples from Baseball Statistics</em></a> and watching Rasmus Bååth’s
+delightful three-part
+<a href="http://sumsar.net/blog/2017/02/introduction-to-bayesian-data-analysis-part-one/">Video Introduction to Bayesian Data Analysis</a>,
+notable amongst other videos, courses, and textbooks. I have much yet to learn,
+but my past experience with statistics has taught me that I understand concepts
+most thoroughly by actually implementing them. Thus, this post is a neophyte’s
+pass at implementing Bayesian regression with some powerful (and complicated)
+tools. As such, it almost certainly contains some inaccuracies and statistical
+failings. (If you notice them, please let me know.) Nonetheless, I present it
+with the motivation that seeing variations in others’ implementations of code
+helps us see more options and pick better ones when writing our own.</p>
+<div id="the-example" class="section level2">
+<h2>The example</h2>
+<p>What follows is two implementations of Bayesian linear regression with
+<a href="http://mc-stan.org/">stan</a> and
+<a href="https://greta-dev.github.io/greta/index.html">greta</a>, two interfaces for
+building and evaluating Bayesian models. The example is adapted from the
+<a href="http://mc-stan.org/users/documentation/index.html">stan</a> (§9.1, p. 123 of the
+PDF) and
+<a href="https://greta-dev.github.io/greta/get_started.html#building_a_model">greta</a>
+docs.</p>
+<p>It is a very simple linear regression of a single variable. Its frequentist
+equivalent would be</p>
+<pre class="r"><code>lm(mpg ~ wt, mtcars)
+#&gt; 
+#&gt; Call:
+#&gt; lm(formula = mpg ~ wt, data = mtcars)
+#&gt; 
+#&gt; Coefficients:
+#&gt; (Intercept)           wt  
+#&gt;      37.285       -5.344</code></pre>
+<p>or visually,</p>
+<pre class="r"><code>library(ggplot2)
+theme_set(hrbrthemes::theme_ipsum_rc())
+
+ggplot(mtcars, aes(wt, mpg)) + 
+    geom_point() + 
+    geom_smooth(method = &quot;lm&quot;)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/lm-plot-1.png" width="672" /></p>
+</div>
+<div id="the-tools" class="section level2">
+<h2>The tools</h2>
+<div id="stan" class="section level3">
+<h3>Stan</h3>
+<p>Stan is a <a href="https://en.wikipedia.org/wiki/Domain-specific_language">DSL</a> for
+implementing Bayesian models. The model is composed in stan, and then compiled
+and called from an interface in another language—in R, the
+<a href="http://mc-stan.org/users/interfaces/rstan.html">rstan</a> package. The stan code
+compiles to C++, and rstan makes parallelization across chains simple.</p>
+<p>It has <a href="https://shop.spreadshirt.com/mc-stan/">its own shirts</a>.</p>
+</div>
+<div id="greta" class="section level3">
+<h3>greta</h3>
+<p>greta is an R package by Nick Golding that implements MCMC sampling in
+TensorFlow, and can thus run on GPUs and scale well, provided the appropriate
+hardware and drivers. It is built on top of RStudio’s
+<a href="https://tensorflow.rstudio.com/">tensorflow package</a>.</p>
+<p>It does not have shirts, as far as I am aware, but does have a nice logo that
+would make a handsome hex sticker.</p>
+</div>
+</div>
+<div id="the-code" class="section level2">
+<h2>The code</h2>
+<div id="stan-1" class="section level3">
+<h3>Stan</h3>
+<p>The stan model has to be composed in, well, stan. This can be in a separate
+file or a string, but I find the former usually too disconnected from the rest
+of the code and the latter a magnet for typos. The better solution in my
+attempts thus far is to implement the model in an RMarkdown code chunk with an
+<code>output.var</code> parameter set. When the chunk is run, the model is compiled and
+assigned to an R object with the supplied name. Code highlighting, completion,
+and so on work as usual.</p>
+<p>Stan is declarative, with chunks to define input data, parameters, the model,
+and more as necessary. Keeping it very simple, we will supply</p>
+<ul>
+<li><code>n</code>, a number of observations,</li>
+<li><code>x</code>, our single feature (a vector of length <code>n</code>), and</li>
+<li><code>y</code>, our output (another vector of length <code>n</code>).</li>
+</ul>
+<p>The model will calculate</p>
+<ul>
+<li><code>beta0</code>, the y intercept,</li>
+<li><code>beta1</code>, the slope, and</li>
+<li><code>epsilon</code>, the standard deviation of y.</li>
+</ul>
+<p>While we could supply informative priors by adding lines like
+<code>beta0 = normal(30, 2);</code>, we will instead leave it blank, so stan will use a
+uniform prior, determining a plausible range by running lots of warm-up
+iterations.</p>
+<p>Our model is just a line. We assume our outputs are normally distributed, with
+a mean defined by the line, and a standard deviation parameterized by <code>epsilon</code>.</p>
+<p>All together, and set to output to an R variable called <code>model_stan</code>:</p>
+<pre class="stan"><code>data {
+    int&lt;lower=0&gt; n;
+    vector[n] x;
+    vector[n] y;
+}
+
+parameters {
+    real beta0;
+    real beta1;
+    real&lt;lower=0&gt; epsilon;
+}
+
+model {
+    y ~ normal(beta0 + beta1*x, epsilon);
+}</code></pre>
+<p>Compiling takes about 40 seconds on my computer. It also produces 15 warnings
+that</p>
+<blockquote>
+<p><code>warning: pragma diagnostic pop could not pop, no matching push [-Wunknown-pragmas] #pragma clang diagnostic pop</code></p>
+</blockquote>
+<p>but <a href="https://stackoverflow.com/questions/49525561/rcppeigen-package-pragma-clang-diagnostic-pop-warnings">apparently they’re harmless</a>,
+so I set <code>message=FALSE</code>.</p>
+<p>To run the model, we just load rstan and call <code>sampling</code> on the compiled model,
+supplying the data. I set the algorithm to Hamiltonian Monte Carlo and the
+number of chains to 1 so as to compare more equally with greta.</p>
+<pre class="r"><code>library(rstan)
+
+draws_stan &lt;- sampling(model_stan, 
+                       data = list(n = nrow(mtcars),
+                                   x = mtcars$wt, 
+                                   y = mtcars$mpg),
+                       algorithm = &quot;HMC&quot;,
+                       chains = 1)
+#&gt; 
+#&gt; SAMPLING FOR MODEL &#39;mtcars&#39; NOW (CHAIN 1).
+#&gt; 
+#&gt; Gradient evaluation took 2.4e-05 seconds
+#&gt; 1000 transitions using 10 leapfrog steps per transition would take 0.24 seconds.
+#&gt; Adjust your expectations accordingly!
+#&gt; 
+#&gt; 
+#&gt; Iteration:    1 / 2000 [  0%]  (Warmup)
+#&gt; Iteration:  200 / 2000 [ 10%]  (Warmup)
+#&gt; Iteration:  400 / 2000 [ 20%]  (Warmup)
+#&gt; Iteration:  600 / 2000 [ 30%]  (Warmup)
+#&gt; Iteration:  800 / 2000 [ 40%]  (Warmup)
+#&gt; Iteration: 1000 / 2000 [ 50%]  (Warmup)
+#&gt; Iteration: 1001 / 2000 [ 50%]  (Sampling)
+#&gt; Iteration: 1200 / 2000 [ 60%]  (Sampling)
+#&gt; Iteration: 1400 / 2000 [ 70%]  (Sampling)
+#&gt; Iteration: 1600 / 2000 [ 80%]  (Sampling)
+#&gt; Iteration: 1800 / 2000 [ 90%]  (Sampling)
+#&gt; Iteration: 2000 / 2000 [100%]  (Sampling)
+#&gt; 
+#&gt;  Elapsed Time: 0.126011 seconds (Warm-up)
+#&gt;                0.051108 seconds (Sampling)
+#&gt;                0.177119 seconds (Total)
+
+draws_stan
+#&gt; Inference for Stan model: mtcars.
+#&gt; 1 chains, each with iter=2000; warmup=1000; thin=1; 
+#&gt; post-warmup draws per chain=1000, total post-warmup draws=1000.
+#&gt; 
+#&gt;           mean se_mean   sd   2.5%    25%    50%    75%  97.5% n_eff Rhat
+#&gt; beta0    37.03    0.04 1.33  34.40  36.08  37.03  38.03  39.61  1000    1
+#&gt; beta1    -5.26    0.01 0.41  -6.06  -5.55  -5.25  -4.97  -4.49  1000    1
+#&gt; epsilon   3.10    0.01 0.31   2.52   2.90   3.09   3.30   3.80  1000    1
+#&gt; lp__    -51.02    0.10 1.14 -53.86 -51.58 -50.73 -50.19 -49.66   132    1
+#&gt; 
+#&gt; Samples were drawn using HMC(diag_e) at Tue Apr 17 04:23:08 2018.
+#&gt; For each parameter, n_eff is a crude measure of effective sample size,
+#&gt; and Rhat is the potential scale reduction factor on split chains (at 
+#&gt; convergence, Rhat=1).</code></pre>
+<p>Since this is a very small model, it runs nearly instantaneously (0.26 seconds).
+The print methods of the call and resulting model are nicely informative. It
+looks good, but let’s check the diagnostic plots:</p>
+<pre class="r"><code>plot(draws_stan)
+#&gt; ci_level: 0.8 (80% intervals)
+#&gt; outer_level: 0.95 (95% intervals)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/stan-diagnostics-1.png" width="672" /></p>
+<pre class="r"><code>traceplot(draws_stan)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/stan-diagnostics-2.png" width="672" /></p>
+<p>The parameter ranges look plausible and the traceplots are fuzzy caterpillars,
+so it seems all is well. Let’s extract the data and plot:</p>
+<pre class="r"><code>draws_stan_df &lt;- as.data.frame(draws_stan)
+
+ggplot(draws_stan_df, aes(beta0, beta1, color = epsilon)) + 
+    geom_point(alpha = 0.3) + 
+    geom_density2d(color = &quot;gray30&quot;) + 
+    scale_color_viridis_c(option = &quot;plasma&quot;) + 
+    labs(title = &quot;Stan parameter space&quot;)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/stan-draws-1.png" width="672" /></p>
+<pre class="r"><code>ggplot(mtcars, aes(wt, mpg)) + 
+    geom_point() + 
+    geom_abline(aes(intercept = beta0, slope = beta1), draws_stan_df, 
+                alpha = 0.1, color = &quot;gray50&quot;) + 
+    geom_abline(slope = mean(draws_stan_df$beta1), 
+                intercept = mean(draws_stan_df$beta0), 
+                color = &quot;blue&quot;, size = 1) + 
+    labs(title = &quot;Bayesian regression on mtcars via stan&quot;)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/stan-draws-2.png" width="672" /></p>
+<p>Looks quite plausible for the data at hand.</p>
+</div>
+</div>
+<div id="greta-1" class="section level2">
+<h2>greta</h2>
+<p>Code for greta is very parallel to that of stan, with the difference that code
+for a greta model is written entirely in R.</p>
+<p>Input data is turned into a “greta array” object with <code>as_data</code>. Parameters are
+defined with distribution functions similar to stan, though in greta they also
+produce greta arrays, albeit with not-yet-calculated data. There is no default
+uninformative prior in greta, so we’ll insert some broad but plausible values.</p>
+<pre class="r"><code>library(greta)
+
+x &lt;- as_data(mtcars$wt)
+y &lt;- as_data(mtcars$mpg)
+
+beta0 &lt;- uniform(-100, 100)
+beta1 &lt;- uniform(-100, 100)
+epsilon &lt;- uniform(0, 1000)
+
+head(x)
+#&gt; greta array (operation)
+#&gt; 
+#&gt;       [,1]
+#&gt; [1,] 2.620
+#&gt; [2,] 2.875
+#&gt; [3,] 2.320
+#&gt; [4,] 3.215
+#&gt; [5,] 3.440
+#&gt; [6,] 3.460
+
+beta0
+#&gt; greta array (variable following a uniform distribution)
+#&gt; 
+#&gt;      [,1]
+#&gt; [1,]  ?</code></pre>
+<p>To combine our greta arrays into a model, we use ordinary arithmetic, leaving
+greta to keep track of array dimensions. We set our assumed distribution of the
+output by assigning to the <code>distribution</code> function in a fashion akin to
+<code>names&lt;-</code>, but here setting our output distribution with our defined but
+uncalculated arrays.</p>
+<p>Once everything is defined, we pass the yet-uncalculated objects we want to get
+out into the <code>model</code> function.</p>
+<pre class="r"><code>mu &lt;- beta0 + beta1*x
+
+distribution(y) &lt;- normal(mu, epsilon)
+
+model_greta &lt;- model(beta0, beta1, epsilon)</code></pre>
+<p>None of the above objects individually look like much, but greta can use
+DiagrammeR to plot a beautiful dependency graph of the model:</p>
+<pre class="r"><code>plot(model_greta)</code></pre>
+<p><img src="img/2018/04/greta.png" /></p>
+<p>To actually run the simulations, we pass the model to the <code>mcmc</code> function. Here
+I set the <code>warmup</code> and <code>n_samples</code> parameters to be parallel to stan.</p>
+<pre class="r"><code>draws_greta &lt;- mcmc(model_greta, warmup = 1000,  n_samples = 1000)</code></pre>
+<p>I am running this on my CPU, as the TensorFlow install is simpler. For such a
+small model, this is quite slow, taking about 2 minutes each for the warmup and
+sampling runs. It is supposed to scale well, though, so perhaps I am just
+running into overhead that will not grow or which would be much faster on more
+apt hardware. In any case, it does have a nice dynamic display showing the
+completed and remaining iterations and estimated time remaining, which seems
+pretty accurate, as progress bars go.</p>
+<p>The resulting <code>draws_greta</code> object is a list of an array. It does not have a
+useful print method, but its <code>mcmc.list</code> class (from
+<a href="https://cran.r-project.org/web/packages/coda/index.html">coda</a>) does have nice
+methods for <code>summary</code> and diagnostic plots:</p>
+<pre class="r"><code>summary(draws_greta)
+#&gt; 
+#&gt; Iterations = 1:1000
+#&gt; Thinning interval = 1 
+#&gt; Number of chains = 1 
+#&gt; Sample size per chain = 1000 
+#&gt; 
+#&gt; 1. Empirical mean and standard deviation for each variable,
+#&gt;    plus standard error of the mean:
+#&gt; 
+#&gt;           Mean     SD Naive SE Time-series SE
+#&gt; beta0   37.331 1.9720  0.06236        0.04898
+#&gt; beta1   -5.368 0.5839  0.01846        0.01446
+#&gt; epsilon  3.196 0.4100  0.01296        0.01815
+#&gt; 
+#&gt; 2. Quantiles for each variable:
+#&gt; 
+#&gt;           2.5%    25%    50%    75%  97.5%
+#&gt; beta0   33.423 36.098 37.343 38.599 41.230
+#&gt; beta1   -6.497 -5.728 -5.355 -4.999 -4.151
+#&gt; epsilon  2.465  2.889  3.163  3.478  4.007
+
+bayesplot::mcmc_intervals(draws_greta)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-diagnostics-1.png" width="672" /></p>
+<pre class="r"><code>bayesplot::mcmc_trace(draws_greta)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-diagnostics-2.png" width="672" /></p>
+<p>Everything looks pretty good and comparable to stan.</p>
+<p>Let’s extract and plot the results:</p>
+<pre class="r"><code>draws_greta_df &lt;- as.data.frame(draws_greta[[1]])
+
+ggplot(draws_greta_df, aes(beta0, beta1, color = epsilon)) + 
+    geom_point(alpha = 0.3) + 
+    geom_density2d(color = &quot;gray30&quot;) + 
+    scale_color_viridis_c(option = &quot;plasma&quot;) + 
+    labs(title = &quot;greta parameter space&quot;)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-plots-1.png" width="672" /></p>
+<pre class="r"><code>ggplot(mtcars, aes(wt, mpg)) + 
+    geom_point() + 
+    geom_abline(aes(intercept = beta0, slope = beta1), draws_greta_df, 
+                alpha = 0.1, color = &quot;gray50&quot;) + 
+    geom_abline(slope = mean(draws_greta_df$beta1), 
+                intercept = mean(draws_greta_df$beta0), 
+                color = &quot;blue&quot;, size = 1) + 
+    labs(title = &quot;Bayesian regression on mtcars via greta&quot;)</code></pre>
+<p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-plots-2.png" width="672" /></p>
+<p>Looks pretty similar to stan.</p>
+</div>
+<div id="reflections" class="section level2">
+<h2>Reflections</h2>
+<div id="stan-2" class="section level3">
+<h3>Stan</h3>
+<p>Stan is actually another language, although it is not particularly complicated
+or hard to learn. Since it is mostly declarative, it is easy to see what goes
+where in the model, but not so easy to figure out where bugs are when
+compilation fails. Error messages (aside from the annoying warnings) are pretty
+good, though.</p>
+<p>Written in an RMarkdown chunk, stan is really easy to integrate into a larger
+workflow without breaking stride. There is also the
+<a href="http://mc-stan.org/rstanarm/"><code>rstanarm</code></a> package, which assembles up typical
+models into R functions. While this seems like it should be simpler, a quick
+attempt showed it to actually be somewhat more finicky, as the resulting
+functions have a lot of parameters and are fairly complicated compared to the
+smaller, simpler individual pieces of stan itself.</p>
+<p>The biggest problem I ran into is that since stan is another language, the
+documentation is not available with <code>?</code>. In fact, it is
+<a href="http://mc-stan.org/users/documentation/index.html">a 637-page PDF</a>. The PDF is
+in fact very well-written and organized, but still, it’s a PDF, which is
+annoying as it does not integrate into the web well. (I can’t put a link to the
+section on linear regression here.) Hopefully the documentation will eventually
+be better integrated into the otherwise-great stan website. In an ideal world,
+it could be integrated into R’s help, too, though that would require some work.</p>
+</div>
+<div id="greta-2" class="section level3">
+<h3>greta</h3>
+<p>greta avoids a lot of the issues of stan. Documentation is available as usual.
+Intermediary products are easily viewable, and an individual problematic call
+will fail, making debugging simpler. It is not quite as easy to look at the
+code and quickly see the model structure, but the models <code>plot</code> method is a
+pretty solution to this problem.</p>
+<p>In terms of organization, greta almost unavoidably leaves a lot of objects in
+the global environment with no inherent organization. The objects will not fit
+neatly in a data frame, so there is no natural organizational approach.
+Everything could (and perhaps should) be kept in a list or environment. A more
+robust approach would be to make a class with slots for the parts of the model
+and a suitable print method. While more work to build and apply, such an
+approach would allow quicker manipulations of multiple models without mess or
+confusion.</p>
+<p>The biggest drawback in my short experiment is speed. I ran simulations on
+slightly larger (not “big”, in any sense) data, and it had no effect on run
+time, which seems to be purely a function of the number of iterations. I am not
+sure how it scales, but given that it was explicitly built for such a purpose,
+hopefully what I experienced is just overhead.</p>
+<p>Overall, greta is a bit less mature than stan, which has a bigger, funded team
+working on it. Given that greta leverages other projects that have such an
+infrastructure, it may not require such dedicated resources, but it does have
+room to grow yet. Hopefully it will!</p>
+</div>
+<div id="bayesian-simulation" class="section level3">
+<h3>Bayesian simulation</h3>
+<p>For a relative beginner, both interfaces proved surprisingly simple and easily
+adaptable. I—as ever—have much yet to learn, but these frameworks will
+doubtlessly prove to be great assets with which to further explore the
+potential of Bayesian statistics.</p>
+</div>
+</div>
