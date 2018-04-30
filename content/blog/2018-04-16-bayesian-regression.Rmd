@@ -1,6 +1,6 @@
 ---
 title: 'Bayesian Regression'
-description: 'greta and stan go for a walk'
+description: 'greta and Stan go for a walk'
 author: Edward Visel
 date: '2018-04-16'
 slug: bayesian-regression
@@ -43,10 +43,10 @@ helps us see more options and pick better ones when writing our own.
 ## The example
 
 What follows is two implementations of Bayesian linear regression with
-[stan](http://mc-stan.org/) and
+[Stan](http://mc-stan.org/) and
 [greta](https://greta-dev.github.io/greta/index.html), two interfaces for
 building and evaluating Bayesian models. The example is adapted from the
-[stan](http://mc-stan.org/users/documentation/index.html) (§9.1, p. 123 of the
+[Stan](http://mc-stan.org/users/documentation/index.html) (§9.1, p. 123 of the
 PDF) and 
 [greta](https://greta-dev.github.io/greta/get_started.html#building_a_model) 
 docs.
@@ -71,9 +71,9 @@ ggplot(mtcars, aes(wt, mpg)) +
 ### Stan
 
 Stan is a [DSL](https://en.wikipedia.org/wiki/Domain-specific_language) for 
-implementing Bayesian models. The model is composed in stan, and then compiled 
+implementing Bayesian models. The model is composed in Stan, and then compiled 
 and called from an interface in another language—in R, the 
-[rstan](http://mc-stan.org/users/interfaces/rstan.html) package. The stan code 
+[rstan](http://mc-stan.org/users/interfaces/rstan.html) package. The Stan code 
 compiles to C++, and rstan makes parallelization across chains simple. 
 
 It has [its own shirts](https://shop.spreadshirt.com/mc-stan/).
@@ -92,7 +92,7 @@ would make a handsome hex sticker.
 
 ### Stan
 
-The stan model has to be composed in, well, stan. This can be in a separate 
+The Stan model has to be composed in, well, Stan. This can be in a separate 
 file or a string, but I find the former usually too disconnected from the rest 
 of the code and the latter a magnet for typos. The better solution in my 
 attempts thus far is to implement the model in an RMarkdown code chunk with an 
@@ -100,8 +100,10 @@ attempts thus far is to implement the model in an RMarkdown code chunk with an
 assigned to an R object with the supplied name. Code highlighting, completion, 
 and so on work as usual.
 
-Stan is declarative, with chunks to define input data, parameters, the model, 
-and more as necessary. Keeping it very simple, we will supply
+Stan is ~~declarative~~ imperative^[h/t [Daniel 
+Lee](https://twitter.com/djsyclik/status/990706903989800960). Thank you!], with 
+chunks to define input data, parameters, the model, and more as necessary. 
+Keeping it very simple, we will supply
 
 - `n`, a number of observations,
 - `x`, our single feature (a vector of length `n`), and 
@@ -114,7 +116,7 @@ The model will calculate
 - `epsilon`, the standard deviation of y.
 
 While we could supply informative priors by adding lines like 
-`beta0 = normal(30, 2);`, we will instead leave it blank, so stan will use a 
+`beta0 = normal(30, 2);`, we will instead leave it blank, so Stan will use a 
 uniform prior, determining a plausible range by running lots of warm-up 
 iterations.
 
@@ -137,7 +139,7 @@ parameters {
 }
 
 model {
-    beta0 ~ normal(37, 2);
+    beta0 ~ normal(37, 3);
     beta1 ~ normal(-5, 1);
     epsilon ~ student_t(3, 3, 1);
     y ~ normal(beta0 + beta1*x, epsilon);
@@ -196,8 +198,12 @@ plot(draws_stan)
 traceplot(draws_stan)
 ```
 
-The parameter ranges look plausible and the traceplots are fuzzy caterpillars, 
-so it seems all is well. Let's extract the data and plot:
+The intercept is moving more than the slope or standard deviation, which is 
+reasonable considering the dimensions. The data is not totally linear (it could 
+be better fit with a quadratic function), but the traceplots are fuzzy 
+caterpillars, so it seems all is well. 
+
+Let's extract the data and plot:
 
 ```{r stan-draws}
 draws_stan_df <- as.data.frame(draws_stan)
@@ -221,11 +227,11 @@ Looks quite plausible for the data at hand.
 
 ## greta
 
-Code for greta is very parallel to that of stan, with the difference that code 
+Code for greta is very parallel to that of Stan, with the difference that code 
 for a greta model is written entirely in R. 
 
 Input data is turned into a "greta array" object with `as_data`. Parameters are 
-defined with distribution functions similar to stan, though in greta they also 
+defined with distribution functions similar to Stan, though in greta they also 
 produce greta arrays, albeit with not-yet-calculated data. There is no default 
 uninformative prior in greta, so we'll insert some broad but plausible values.
 ```{r greta-vars, message=FALSE}
@@ -278,7 +284,7 @@ DiagrammeR::export_graph(graph,
 ![](img/2018/04/greta.png)
 
 To actually run the simulations, we pass the model to the `mcmc` function. Here 
-I set the `warmup` and `n_samples` parameters to be parallel to stan.
+I set the `warmup` and `n_samples` parameters to be parallel to Stan.
 ```{r greta-draw}
 draws_greta <- mcmc(model_greta, warmup = 1000,  n_samples = 1000)
 ```
@@ -302,7 +308,7 @@ bayesplot::mcmc_intervals(draws_greta)
 bayesplot::mcmc_trace(draws_greta)
 ```
 
-Everything looks pretty good and comparable to stan. 
+Everything looks pretty good and comparable to Stan. 
 
 Let's extract and plot the results:
 ```{r greta-plots}
@@ -323,7 +329,7 @@ ggplot(mtcars, aes(wt, mpg)) +
     labs(title = "Bayesian regression on mtcars via greta")
 ```
 
-Looks pretty similar to stan.
+Looks pretty similar to Stan.
 
 ## Reflections
 
@@ -335,7 +341,7 @@ where in the model, but not so easy to figure out where bugs are when
 compilation fails. Error messages (aside from the annoying warnings) are pretty 
 good, though.
 
-Written in an RMarkdown chunk, stan is really easy to integrate into a larger 
+Written in an RMarkdown chunk, Stan is really easy to integrate into a larger 
 workflow without breaking stride. There is also the 
 [`rstanarm`](http://mc-stan.org/rstanarm/) package, which assembles up typical 
 models into R functions. While this seems like it should be simpler, a quick 
@@ -343,18 +349,18 @@ attempt showed it to actually be somewhat more finicky, as the resulting
 functions have a lot of parameters and are fairly complicated compared to the 
 smaller, simpler individual pieces of stan itself.
 
-The biggest problem I ran into is that since stan is another language, the 
+The biggest problem I ran into is that since Stan is another language, the 
 documentation is not available with `?`. In fact, it is 
 [a 637-page PDF](http://mc-stan.org/users/documentation/index.html). The PDF is 
 in fact very well-written and organized, but still, it's a PDF, which is 
 annoying as it does not integrate into the web well. (I can't put a link to the 
 section on linear regression here.) Hopefully the documentation will eventually 
-be better integrated into the otherwise-great stan website. In an ideal world, 
+be better integrated into the otherwise-great Stan website. In an ideal world, 
 it could be integrated into R's help, too, though that would require some work.
 
 ### greta
 
-greta avoids a lot of the issues of stan. Documentation is available as usual. 
+greta avoids a lot of the issues of Stan. Documentation is available as usual. 
 Intermediary products are easily viewable, and an individual problematic call 
 will fail, making debugging simpler. It is not quite as easy to look at the 
 code and quickly see the model structure, but the models `plot` method is a 
@@ -375,7 +381,7 @@ time, which seems to be purely a function of the number of iterations. I am not
 sure how it scales, but given that it was explicitly built for such a purpose, 
 hopefully what I experienced is just overhead.
 
-Overall, greta is a bit less mature than stan, which has a bigger, funded team 
+Overall, greta is a bit less mature than Stan, which has a bigger, funded team 
 working on it. Given that greta leverages other projects that have such an 
 infrastructure, it may not require such dedicated resources, but it does have 
 room to grow yet. Hopefully it will!
