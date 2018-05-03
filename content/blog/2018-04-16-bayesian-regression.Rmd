@@ -36,7 +36,7 @@ but my past experience with statistics has taught me that I understand concepts
 most thoroughly by actually implementing them. Thus, this post is a neophyte's 
 pass at implementing Bayesian regression with some powerful (and complicated) 
 tools. As such, it almost certainly contains some inaccuracies and statistical 
-failings. (If you notice them, please let me know.) Nonetheless, I present it 
+failings. (If you notice them, please let me know!) Nonetheless, I present it 
 with the motivation that seeing variations in others' implementations of code 
 helps us see more options and pick better ones when writing our own.
 
@@ -184,6 +184,7 @@ draws_stan <- sampling(model_stan,
                        data = list(n = nrow(mtcars),
                                    x = mtcars$wt, 
                                    y = mtcars$mpg),
+                       seed = 47,
                        algorithm = "HMC",
                        chains = 1)
 
@@ -220,7 +221,7 @@ ggplot(mtcars, aes(wt, mpg)) +
     geom_abline(slope = mean(draws_stan_df$beta1), 
                 intercept = mean(draws_stan_df$beta0), 
                 color = "blue", size = 1) + 
-    labs(title = "Bayesian regression on mtcars via stan")
+    labs(title = "Bayesian regression on mtcars via Stan")
 ```
 
 Looks quite plausible for the data at hand.
@@ -286,16 +287,20 @@ DiagrammeR::export_graph(graph,
 To actually run the simulations, we pass the model to the `mcmc` function. Here 
 I set the `warmup` and `n_samples` parameters to be parallel to Stan.
 ```{r greta-draw}
+set.seed(47)
+
 draws_greta <- mcmc(model_greta, warmup = 1000,  n_samples = 1000)
 ```
 
 I am running this on my CPU, as the TensorFlow install is simpler. For such a 
 small model, this is quite slow, taking about 2 minutes each for the warmup and 
-sampling runs. It is supposed to scale well, though, so perhaps I am just 
-running into overhead that will not grow or which would be much faster on more 
-apt hardware. In any case, it does have a nice dynamic display showing the 
-completed and remaining iterations and estimated time remaining, which seems 
-pretty accurate, as progress bars go.
+sampling runs.^[After upgrading to R 3.5.0 and reinstalling greta and 
+TensorFlow, warmup and sampling take about 1 minute instead of 2. I'm not sure 
+what caused the speedup, but it is wholly welcome!] It is supposed to scale 
+well, though, so perhaps I am just running into overhead that will not grow or 
+which would be much faster on more apt hardware. In any case, it does have a 
+nice dynamic display showing the completed and remaining iterations and 
+estimated time remaining, which seems pretty accurate, as progress bars go.
 
 The resulting `draws_greta` object is a list of an array. It does not have a 
 useful print method, but its `mcmc.list` class (from 
@@ -308,7 +313,7 @@ bayesplot::mcmc_intervals(draws_greta)
 bayesplot::mcmc_trace(draws_greta)
 ```
 
-Everything looks pretty good and comparable to Stan. 
+Everything looks reasonable and comparable to Stan. 
 
 Let's extract and plot the results:
 ```{r greta-plots}
@@ -336,8 +341,8 @@ Looks pretty similar to Stan.
 ### Stan
 
 Stan is actually another language, although it is not particularly complicated 
-or hard to learn. Since it is mostly declarative, it is easy to see what goes 
-where in the model, but not so easy to figure out where bugs are when 
+or hard to learn. Since it is ~~declarative~~ imperative, it is easy to see 
+what goes where in the model, but not so easy to figure out where bugs are when 
 compilation fails. Error messages (aside from the annoying warnings) are pretty 
 good, though.
 

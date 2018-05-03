@@ -33,7 +33,7 @@ but my past experience with statistics has taught me that I understand concepts
 most thoroughly by actually implementing them. Thus, this post is a neophyte’s
 pass at implementing Bayesian regression with some powerful (and complicated)
 tools. As such, it almost certainly contains some inaccuracies and statistical
-failings. (If you notice them, please let me know.) Nonetheless, I present it
+failings. (If you notice them, please let me know!) Nonetheless, I present it
 with the motivation that seeing variations in others’ implementations of code
 helps us see more options and pick better ones when writing our own.</p>
 <div id="the-example" class="section level2">
@@ -149,6 +149,7 @@ draws_stan &lt;- sampling(model_stan,
                        data = list(n = nrow(mtcars),
                                    x = mtcars$wt, 
                                    y = mtcars$mpg),
+                       seed = 47,
                        algorithm = &quot;HMC&quot;,
                        chains = 1)
 #&gt; 
@@ -172,9 +173,9 @@ draws_stan &lt;- sampling(model_stan,
 #&gt; Iteration: 1800 / 2000 [ 90%]  (Sampling)
 #&gt; Iteration: 2000 / 2000 [100%]  (Sampling)
 #&gt; 
-#&gt;  Elapsed Time: 0.132178 seconds (Warm-up)
-#&gt;                0.309604 seconds (Sampling)
-#&gt;                0.441782 seconds (Total)
+#&gt;  Elapsed Time: 0.234706 seconds (Warm-up)
+#&gt;                0.032676 seconds (Sampling)
+#&gt;                0.267382 seconds (Total)
 
 draws_stan
 #&gt; Inference for Stan model: mtcars.
@@ -182,12 +183,12 @@ draws_stan
 #&gt; post-warmup draws per chain=1000, total post-warmup draws=1000.
 #&gt; 
 #&gt;           mean se_mean   sd   2.5%    25%    50%    75%  97.5% n_eff Rhat
-#&gt; beta0    36.98    0.09 1.46  34.22  36.02  36.99  38.00  39.75   247 1.00
-#&gt; beta1    -5.26    0.03 0.43  -6.08  -5.54  -5.28  -4.98  -4.36   282 1.00
-#&gt; epsilon   3.11    0.01 0.37   2.45   2.85   3.08   3.33   3.90  1000 1.00
-#&gt; lp__    -51.14    0.09 1.22 -54.65 -51.72 -50.86 -50.24 -49.68   185 1.01
+#&gt; beta0    37.02    0.08 1.53  34.08  36.02  36.96  37.99  40.10   402 1.00
+#&gt; beta1    -5.27    0.02 0.46  -6.15  -5.57  -5.25  -4.96  -4.43   389 1.00
+#&gt; epsilon   3.10    0.01 0.36   2.46   2.86   3.08   3.31   3.94  1000 1.00
+#&gt; lp__    -51.08    0.10 1.28 -54.51 -51.61 -50.73 -50.17 -49.65   179 1.01
 #&gt; 
-#&gt; Samples were drawn using HMC(diag_e) at Mon Apr 30 16:46:49 2018.
+#&gt; Samples were drawn using HMC(diag_e) at Thu May  3 19:25:53 2018.
 #&gt; For each parameter, n_eff is a crude measure of effective sample size,
 #&gt; and Rhat is the potential scale reduction factor on split chains (at 
 #&gt; convergence, Rhat=1).</code></pre>
@@ -220,7 +221,7 @@ ggplot(draws_stan_df, aes(beta0, beta1, color = epsilon)) +
     geom_abline(slope = mean(draws_stan_df$beta1), 
                 intercept = mean(draws_stan_df$beta0), 
                 color = &quot;blue&quot;, size = 1) + 
-    labs(title = &quot;Bayesian regression on mtcars via stan&quot;)</code></pre>
+    labs(title = &quot;Bayesian regression on mtcars via Stan&quot;)</code></pre>
 <p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/stan-draws-2.png" width="672" /></p>
 <p>Looks quite plausible for the data at hand.</p>
 </div>
@@ -276,14 +277,16 @@ DiagrammeR to plot a beautiful dependency graph of the model:</p>
 <p><img src="img/2018/04/greta.png" /></p>
 <p>To actually run the simulations, we pass the model to the <code>mcmc</code> function. Here
 I set the <code>warmup</code> and <code>n_samples</code> parameters to be parallel to Stan.</p>
-<pre class="r"><code>draws_greta &lt;- mcmc(model_greta, warmup = 1000,  n_samples = 1000)</code></pre>
+<pre class="r"><code>set.seed(47)
+
+draws_greta &lt;- mcmc(model_greta, warmup = 1000,  n_samples = 1000)</code></pre>
 <p>I am running this on my CPU, as the TensorFlow install is simpler. For such a
 small model, this is quite slow, taking about 2 minutes each for the warmup and
-sampling runs. It is supposed to scale well, though, so perhaps I am just
-running into overhead that will not grow or which would be much faster on more
-apt hardware. In any case, it does have a nice dynamic display showing the
-completed and remaining iterations and estimated time remaining, which seems
-pretty accurate, as progress bars go.</p>
+sampling runs.<a href="#fn2" class="footnote-ref" id="fnref2"><sup>2</sup></a> It is supposed to scale
+well, though, so perhaps I am just running into overhead that will not grow or
+which would be much faster on more apt hardware. In any case, it does have a
+nice dynamic display showing the completed and remaining iterations and
+estimated time remaining, which seems pretty accurate, as progress bars go.</p>
 <p>The resulting <code>draws_greta</code> object is a list of an array. It does not have a
 useful print method, but its <code>mcmc.list</code> class (from
 <a href="https://cran.r-project.org/web/packages/coda/index.html">coda</a>) does have nice
@@ -299,22 +302,22 @@ methods for <code>summary</code> and diagnostic plots:</p>
 #&gt;    plus standard error of the mean:
 #&gt; 
 #&gt;           Mean     SD Naive SE Time-series SE
-#&gt; beta0   37.244 2.0220  0.06394        0.07968
-#&gt; beta1   -5.333 0.5914  0.01870        0.02292
-#&gt; epsilon  3.198 0.4374  0.01383        0.05685
+#&gt; beta0   37.148 2.1323  0.06743        0.10598
+#&gt; beta1   -5.313 0.6399  0.02024        0.03252
+#&gt; epsilon  3.154 0.4468  0.01413        0.06356
 #&gt; 
 #&gt; 2. Quantiles for each variable:
 #&gt; 
 #&gt;           2.5%    25%    50%    75%  97.5%
-#&gt; beta0   33.382 35.903 37.208 38.619 41.448
-#&gt; beta1   -6.543 -5.728 -5.328 -4.922 -4.201
-#&gt; epsilon  2.457  2.884  3.166  3.482  4.124
+#&gt; beta0   33.160 35.717 37.109 38.610 41.293
+#&gt; beta1   -6.536 -5.729 -5.319 -4.888 -4.105
+#&gt; epsilon  2.345  2.864  3.113  3.374  4.248
 
 bayesplot::mcmc_intervals(draws_greta)</code></pre>
 <p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-diagnostics-1.png" width="672" /></p>
 <pre class="r"><code>bayesplot::mcmc_trace(draws_greta)</code></pre>
 <p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-diagnostics-2.png" width="672" /></p>
-<p>Everything looks pretty good and comparable to Stan.</p>
+<p>Everything looks reasonable and comparable to Stan.</p>
 <p>Let’s extract and plot the results:</p>
 <pre class="r"><code>draws_greta_df &lt;- as.data.frame(draws_greta[[1]])
 
@@ -340,8 +343,8 @@ ggplot(draws_greta_df, aes(beta0, beta1, color = epsilon)) +
 <div id="stan-2" class="section level3">
 <h3>Stan</h3>
 <p>Stan is actually another language, although it is not particularly complicated
-or hard to learn. Since it is mostly declarative, it is easy to see what goes
-where in the model, but not so easy to figure out where bugs are when
+or hard to learn. Since it is <del>declarative</del> imperative, it is easy to see
+what goes where in the model, but not so easy to figure out where bugs are when
 compilation fails. Error messages (aside from the annoying warnings) are pretty
 good, though.</p>
 <p>Written in an RMarkdown chunk, Stan is really easy to integrate into a larger
@@ -398,5 +401,8 @@ potential of Bayesian statistics.</p>
 <ol>
 <li id="fn1"><p>h/t <a href="https://twitter.com/djsyclik/status/990706903989800960">Daniel
 Lee</a>. Thank you!<a href="#fnref1" class="footnote-back">↩</a></p></li>
+<li id="fn2"><p>After upgrading to R 3.5.0 and reinstalling greta and
+TensorFlow, warmup and sampling take about 1 minute instead of 2. I’m not sure
+what caused the speedup, but it is wholly welcome!<a href="#fnref2" class="footnote-back">↩</a></p></li>
 </ol>
 </div>
