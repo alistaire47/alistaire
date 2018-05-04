@@ -109,14 +109,14 @@ Keeping it very simple, we will supply</p>
 <ul>
 <li><code>beta0</code>, the y intercept,</li>
 <li><code>beta1</code>, the slope, and</li>
-<li><code>epsilon</code>, the standard deviation of y.</li>
+<li><code>sigma</code>, the standard deviation of y.</li>
 </ul>
 <p>While we could supply informative priors by adding lines like
 <code>beta0 = normal(30, 2);</code>, we will instead leave it blank, so Stan will use a
 uniform prior, determining a plausible range by running lots of warm-up
 iterations.</p>
 <p>Our model is just a line. We assume our outputs are normally distributed, with
-a mean defined by the line, and a standard deviation parameterized by <code>epsilon</code>.</p>
+a mean defined by the line, and a standard deviation parameterized by <code>sigma</code>.</p>
 <p>All together, and set to output to an R variable called <code>model_stan</code>:</p>
 <pre class="stan"><code>data {
     int&lt;lower=0&gt; n;
@@ -127,11 +127,11 @@ a mean defined by the line, and a standard deviation parameterized by <code>epsi
 parameters {
     real beta0;
     real beta1;
-    real&lt;lower=0&gt; epsilon;
+    real&lt;lower=0&gt; sigma;
 }
 
 model {
-    y ~ normal(beta0 + beta1*x, epsilon);
+    y ~ normal(beta0 + beta1*x, sigma);
 }</code></pre>
 <p>Compiling takes about 40 seconds on my computer. It also produces 15 warnings
 that</p>
@@ -155,8 +155,8 @@ draws_stan &lt;- sampling(model_stan,
 #&gt; 
 #&gt; SAMPLING FOR MODEL &#39;mtcars&#39; NOW (CHAIN 1).
 #&gt; 
-#&gt; Gradient evaluation took 2.5e-05 seconds
-#&gt; 1000 transitions using 10 leapfrog steps per transition would take 0.25 seconds.
+#&gt; Gradient evaluation took 2.3e-05 seconds
+#&gt; 1000 transitions using 10 leapfrog steps per transition would take 0.23 seconds.
 #&gt; Adjust your expectations accordingly!
 #&gt; 
 #&gt; 
@@ -173,22 +173,22 @@ draws_stan &lt;- sampling(model_stan,
 #&gt; Iteration: 1800 / 2000 [ 90%]  (Sampling)
 #&gt; Iteration: 2000 / 2000 [100%]  (Sampling)
 #&gt; 
-#&gt;  Elapsed Time: 0.234706 seconds (Warm-up)
-#&gt;                0.032676 seconds (Sampling)
-#&gt;                0.267382 seconds (Total)
+#&gt;  Elapsed Time: 0.23787 seconds (Warm-up)
+#&gt;                0.034739 seconds (Sampling)
+#&gt;                0.272609 seconds (Total)
 
 draws_stan
 #&gt; Inference for Stan model: mtcars.
 #&gt; 1 chains, each with iter=2000; warmup=1000; thin=1; 
 #&gt; post-warmup draws per chain=1000, total post-warmup draws=1000.
 #&gt; 
-#&gt;           mean se_mean   sd   2.5%    25%    50%    75%  97.5% n_eff Rhat
-#&gt; beta0    37.02    0.08 1.53  34.08  36.02  36.96  37.99  40.10   402 1.00
-#&gt; beta1    -5.27    0.02 0.46  -6.15  -5.57  -5.25  -4.96  -4.43   389 1.00
-#&gt; epsilon   3.10    0.01 0.36   2.46   2.86   3.08   3.31   3.94  1000 1.00
-#&gt; lp__    -51.08    0.10 1.28 -54.51 -51.61 -50.73 -50.17 -49.65   179 1.01
+#&gt;         mean se_mean   sd   2.5%    25%    50%    75%  97.5% n_eff Rhat
+#&gt; beta0  37.02    0.08 1.53  34.08  36.02  36.96  37.99  40.10   402 1.00
+#&gt; beta1  -5.27    0.02 0.46  -6.15  -5.57  -5.25  -4.96  -4.43   389 1.00
+#&gt; sigma   3.10    0.01 0.36   2.46   2.86   3.08   3.31   3.94  1000 1.00
+#&gt; lp__  -51.08    0.10 1.28 -54.51 -51.61 -50.73 -50.17 -49.65   179 1.01
 #&gt; 
-#&gt; Samples were drawn using HMC(diag_e) at Thu May  3 19:25:53 2018.
+#&gt; Samples were drawn using HMC(diag_e) at Fri May  4 19:52:44 2018.
 #&gt; For each parameter, n_eff is a crude measure of effective sample size,
 #&gt; and Rhat is the potential scale reduction factor on split chains (at 
 #&gt; convergence, Rhat=1).</code></pre>
@@ -208,7 +208,7 @@ caterpillars, so it seems all is well.</p>
 <p>Let’s extract the data and plot:</p>
 <pre class="r"><code>draws_stan_df &lt;- as.data.frame(draws_stan)
 
-ggplot(draws_stan_df, aes(beta0, beta1, color = epsilon)) + 
+ggplot(draws_stan_df, aes(beta0, beta1, color = sigma)) + 
     geom_point(alpha = 0.3) + 
     geom_density2d(color = &quot;gray30&quot;) + 
     scale_color_viridis_c(option = &quot;plasma&quot;) + 
@@ -241,7 +241,7 @@ y &lt;- as_data(mtcars$mpg)
 
 beta0 &lt;- uniform(-100, 100)
 beta1 &lt;- uniform(-100, 100)
-epsilon &lt;- uniform(0, 1000)
+sigma &lt;- uniform(0, 1000)
 
 head(x)
 #&gt; greta array (operation)
@@ -268,9 +268,9 @@ uncalculated arrays.</p>
 out into the <code>model</code> function.</p>
 <pre class="r"><code>mu &lt;- beta0 + beta1*x
 
-distribution(y) &lt;- normal(mu, epsilon)
+distribution(y) &lt;- normal(mu, sigma)
 
-model_greta &lt;- model(beta0, beta1, epsilon)</code></pre>
+model_greta &lt;- model(beta0, beta1, sigma)</code></pre>
 <p>None of the above objects individually look like much, but greta can use
 DiagrammeR to plot a beautiful dependency graph of the model:</p>
 <pre class="r"><code>plot(model_greta)</code></pre>
@@ -301,17 +301,17 @@ methods for <code>summary</code> and diagnostic plots:</p>
 #&gt; 1. Empirical mean and standard deviation for each variable,
 #&gt;    plus standard error of the mean:
 #&gt; 
-#&gt;           Mean     SD Naive SE Time-series SE
-#&gt; beta0   37.148 2.1323  0.06743        0.10598
-#&gt; beta1   -5.313 0.6399  0.02024        0.03252
-#&gt; epsilon  3.154 0.4468  0.01413        0.06356
+#&gt;         Mean     SD Naive SE Time-series SE
+#&gt; beta0 37.148 2.1323  0.06743        0.10598
+#&gt; beta1 -5.313 0.6399  0.02024        0.03252
+#&gt; sigma  3.154 0.4468  0.01413        0.06356
 #&gt; 
 #&gt; 2. Quantiles for each variable:
 #&gt; 
-#&gt;           2.5%    25%    50%    75%  97.5%
-#&gt; beta0   33.160 35.717 37.109 38.610 41.293
-#&gt; beta1   -6.536 -5.729 -5.319 -4.888 -4.105
-#&gt; epsilon  2.345  2.864  3.113  3.374  4.248
+#&gt;         2.5%    25%    50%    75%  97.5%
+#&gt; beta0 33.160 35.717 37.109 38.610 41.293
+#&gt; beta1 -6.536 -5.729 -5.319 -4.888 -4.105
+#&gt; sigma  2.345  2.864  3.113  3.374  4.248
 
 bayesplot::mcmc_intervals(draws_greta)</code></pre>
 <p><img src="/blog/2018-04-16-bayesian-regression_files/figure-html/greta-diagnostics-1.png" width="672" /></p>
@@ -321,7 +321,7 @@ bayesplot::mcmc_intervals(draws_greta)</code></pre>
 <p>Let’s extract and plot the results:</p>
 <pre class="r"><code>draws_greta_df &lt;- as.data.frame(draws_greta[[1]])
 
-ggplot(draws_greta_df, aes(beta0, beta1, color = epsilon)) + 
+ggplot(draws_greta_df, aes(beta0, beta1, color = sigma)) + 
     geom_point(alpha = 0.3) + 
     geom_density2d(color = &quot;gray30&quot;) + 
     scale_color_viridis_c(option = &quot;plasma&quot;) + 

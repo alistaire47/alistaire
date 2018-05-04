@@ -113,7 +113,7 @@ The model will calculate
 
 - `beta0`, the y intercept, 
 - `beta1`, the slope, and 
-- `epsilon`, the standard deviation of y.
+- `sigma`, the standard deviation of y.
 
 While we could supply informative priors by adding lines like 
 `beta0 = normal(30, 2);`, we will instead leave it blank, so Stan will use a 
@@ -121,7 +121,7 @@ uniform prior, determining a plausible range by running lots of warm-up
 iterations.
 
 Our model is just a line. We assume our outputs are normally distributed, with 
-a mean defined by the line, and a standard deviation parameterized by `epsilon`.
+a mean defined by the line, and a standard deviation parameterized by `sigma`.
 
 All together, and set to output to an R variable called `model_stan`:
 ```{r stan-r-model, include=FALSE, message=FALSE, warning=FALSE}
@@ -135,14 +135,14 @@ model_stan <- rstan::stan_model(model_name = 'mtcars',
 parameters {
     real beta0;
     real beta1;
-    real<lower=0> epsilon;
+    real<lower=0> sigma;
 }
 
 model {
     beta0 ~ normal(37, 3);
     beta1 ~ normal(-5, 1);
-    epsilon ~ student_t(3, 3, 1);
-    y ~ normal(beta0 + beta1*x, epsilon);
+    sigma ~ student_t(3, 3, 1);
+    y ~ normal(beta0 + beta1*x, sigma);
 }')
 ```
 
@@ -157,11 +157,11 @@ data {
 parameters {
     real beta0;
     real beta1;
-    real<lower=0> epsilon;
+    real<lower=0> sigma;
 }
 
 model {
-    y ~ normal(beta0 + beta1*x, epsilon);
+    y ~ normal(beta0 + beta1*x, sigma);
 }
 ```
 
@@ -209,7 +209,7 @@ Let's extract the data and plot:
 ```{r stan-draws}
 draws_stan_df <- as.data.frame(draws_stan)
 
-ggplot(draws_stan_df, aes(beta0, beta1, color = epsilon)) + 
+ggplot(draws_stan_df, aes(beta0, beta1, color = sigma)) + 
     geom_point(alpha = 0.3) + 
     geom_density2d(color = "gray30") + 
     scale_color_viridis_c(option = "plasma") + 
@@ -243,7 +243,7 @@ y <- as_data(mtcars$mpg)
 
 beta0 <- uniform(-100, 100)
 beta1 <- uniform(-100, 100)
-epsilon <- uniform(0, 1000)
+sigma <- uniform(0, 1000)
 
 head(x)
 
@@ -261,9 +261,9 @@ out into the `model` function.
 ```{r greta-model, warning=FALSE}
 mu <- beta0 + beta1*x
 
-distribution(y) <- normal(mu, epsilon)
+distribution(y) <- normal(mu, sigma)
 
-model_greta <- model(beta0, beta1, epsilon)
+model_greta <- model(beta0, beta1, sigma)
 ```
 
 None of the above objects individually look like much, but greta can use 
@@ -319,7 +319,7 @@ Let's extract and plot the results:
 ```{r greta-plots}
 draws_greta_df <- as.data.frame(draws_greta[[1]])
 
-ggplot(draws_greta_df, aes(beta0, beta1, color = epsilon)) + 
+ggplot(draws_greta_df, aes(beta0, beta1, color = sigma)) + 
     geom_point(alpha = 0.3) + 
     geom_density2d(color = "gray30") + 
     scale_color_viridis_c(option = "plasma") + 
