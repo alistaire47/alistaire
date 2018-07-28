@@ -1,0 +1,340 @@
+---
+title: Point grids and spatial joins in sf
+author: Edward Visel
+date: '2018-06-24'
+slug: point-grids
+type: post
+categories:
+  - R
+  - spatial
+tags:
+  - r
+  - sf
+  - tigris
+description: ''
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: ''
+draft: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Motivation 
+
+Lately I've been working on a project using a significant amount of
+[sf](https://r-spatial.github.io/sf/). The analysis itself thus far is not
+particularly noteworthy—I've posted some of the more interesting plots on 
+[my Twitter](https://twitter.com/alistaire)—but some of the munging code is
+interesting, so here's a post.
+
+In the course of seeking out data, I found what I was looking for through an 
+API that takes latitude and longitude paramters and a `radius` parameter (in 
+meters, with a maximum). The question, then, was how to get data without making 
+a silly amount of calls or duplicating results more than necessary.
+
+## County centroids
+
+### Getting data
+
+One option is to pick a geographic unit that will largely fit within the radius 
+and calculate centroids to serve as latitude and logitude. Using counties as a 
+unit and the [tigris](https://github.com/walkerke/tigris) package to get 
+shapefiles from the Census, 
+
+```{r counties, cache=TRUE, message=FALSE}
+# tell tigris to return sf objects instead of sp
+options(tigris_class = "sf")
+
+# set `cb = TRUE` to get low-resolution shapes
+counties <- tigris::counties(cb = TRUE)
+
+counties
+```
+
+The resulting sf object has various columns that can be used to join it with 
+non-spatial data, including state and county 
+[FIPS codes](https://en.wikipedia.org/wiki/Federal_Information_Processing_Standards), 
+and other possibly-useful information like land and water area. Most 
+importantly, though, it has a `geometry` column, with each element  containing 
+a multipolygon simple feature of a county. The front matter contains contextual 
+information like the bounding box and map projection.
+
+### ggplot2 and sf
+
+As [ggplot has nice sf support](http://ggplot2.tidyverse.org/reference/ggsf.html), 
+visualizing is easy, if slow. To make a choropleth of each county's land area 
+in California (FIPS `06`), say,
+
+```{r plot-ca, message=FALSE, fig.width=6, fig.height=6}
+library(tidyverse)
+library(sf)
+theme_set(hrbrthemes::theme_ipsum_ps(grid = FALSE))
+
+ca_plot <- counties %>% 
+    filter(STATEFP == "06") %>% 
+    ggplot(aes(fill = ALAND / 10e8)) + 
+    geom_sf(color = NA) + 
+    scale_fill_viridis_c(quote("Billion "*m^2)) + 
+    labs(title = "California", subtitle = "County land area", 
+         caption = "Source: Census 2016") + 
+    theme(panel.grid = element_line(NA), 
+          axis.text = element_text(colour = NA))
+
+ca_plot
+```
+
+Hm, it looks like one of these counties is *really big*, so a centroid approach 
+might not be practical. Let's add county names to the plot to see which county 
+it is.
+
+### Calculating centroids
+
+...ah, crap. While `stat_sf` can plot a number of geoms, its capabilities don't 
+currently include `geom_text`, so we'll need to calculate some coordinates at 
+which to place the labels. Happily, the centroid is a good place to stick 
+labels anyway, so we can get an idea of what the set of centroids would look 
+like at the same time. Calculating the centroid of a multipolygon in sf is as 
+easy as calling `st_centroid`:
+
+```{r centroids}
+county_centroids <- counties %>% st_centroid()
+```
+It prints a message that the centroids are not totally accurate for 
+longitude/latitude data, but the results will be good enough for labels. The 
+result is an sf object that contains points instead of multipolygons:
+```{r print-centroids}
+county_centroids %>% select(STATEFP, NAME)
+```
+
+Let's add them to the plot:
+```{r ca-points, fig.width=6, fig.height=6}
+ca_plot + 
+    geom_sf(data = filter(county_centroids, STATEFP == "06"), 
+            color = "white")
+```
+
+### Extracting coordinates
+
+When passed an sf object containing points, `geom_sf` plots points. The 
+locations look good, but to use `geom_text`, we'll need to extract the 
+coordinates to columns, which we can do with `st_coordinates`. It returns a 
+matrix, so lets cbind it back to `county_centroids`:
+```{r centroid-coords}
+county_centroids <- county_centroids %>% 
+    st_coordinates() %>% 
+    as_data_frame() %>% 
+    bind_cols(county_centroids, .)    # to keep class, sf object must be first
+
+county_centroids %>% select(STATEFP, NAME, X, Y)
+```
+### Plotting labels
+
+Much better. Now let's add labels to the plot:
+```{r ca-labelled, fig.width=6, fig.height=6}
+ca_plot + 
+    geom_text(aes(X, Y, label = NAME), 
+              data = filter(county_centroids, STATEFP == "06"), 
+              color = "white", size = 1) + 
+    labs(x = NULL, y = NULL)
+```
+
+A couple labels get partially lost in the background, but the plot is 
+sufficient to see that San Bernardino county is the huge one. As it abuts Los 
+Angeles county, its population probably isn't evenly distributed, either—most 
+people likely live in the southwest.
+
+### Getting Census data
+
+Let's find out. We can use the 
+[tidycensus](https://walkerke.github.io/tidycensus) package to pull variables 
+from the Census and attach them to sf objects automatically downloaded with 
+tigris. The first time you use it, you'll need to get and store an API key, the 
+process for which is well-documented and not difficult.
+
+Finding Census variable names *is* a little difficult, but a little searching 
+with `tidycensus::load_variables` reveals that `B01003_001E` is 
+`TOTAL POPULATION`. Let's grab it for San Bernardino County's census tracts:
+
+```{r sb, cache=TRUE}
+san_bernardino <- tidycensus::get_acs(
+    geography = "tract",
+    geometry = TRUE,    # return sf object, not ordinary tibble
+    variables = "B01003_001E", 
+    state = "06",    # "CA" would also work
+    county = "071", 
+    key = keyring::key_get('census')
+)
+
+san_bernardino
+```
+
+The variable is stored in the `estimate` column. Let's take a look:
+```{r plot-sb}
+ggplot(san_bernardino, aes(fill = estimate)) + 
+    geom_sf(color = NA) + 
+    scale_fill_viridis_c("Population", labels = scales::comma) + 
+    labs(title = "San Bernardino", subtitle = "Population by Census tract", 
+         caption = "Source: 2012–2016 ACS") + 
+    theme(panel.grid = element_line(NA), 
+          axis.text = element_text(colour = NA))
+```
+
+As census tracts are supposed to have fairly uniform populations, the map is 
+slightly counterintuitive. Color does more to show what areas are growing and 
+shrinking since tracts were last redrawn. Population density, then, is shown by 
+the density of tracts themselves. Since everything but the southwest is in only 
+a handful of tracts, the centroid is clearly a bad center around which to 
+search.
+
+## Point grids
+
+So how shall we search? An alternative is to use a grid of evenly-spaced 
+points. As we can control the size of the grid, we can ensure that it covers 
+all of the desired area.
+
+### `expand.grid` doesn't cut it
+
+Normally to create a grid of values in R, we can use `expand.grid` or the like:
+```{r expand.grid}
+expand.grid(x = 1:3, y = 4:5)
+```
+
+Unfortunately, such an approach fails when applied to spatial data, though, as 
+the distance between degrees of latitude and logitude depends a lot on where 
+you are. If you were at the North Pole, took a step, turned left, and walked in 
+a circle, you could cross every logitude in a few steps. At the Equator, such a 
+feat would require quite a lot more steps.
+
+Visually, on a projection stretched into a rectangle the results looks fine...
+
+```{r}
+theme_set(hrbrthemes::theme_ipsum_ps())
+
+grid_plot <- expand.grid(lon = seq(-180, 180, 10), 
+                         lat = seq(-90, 90, 10)) %>% 
+    pmap(~st_point(c(...))) %>%    # convert each pair to an sf point
+    st_sfc(crs = 4326) %>%    # convert all points to sf column
+    st_sf() %>%    # convert to sf data frame
+    ggplot() + 
+    geom_sf()
+
+grid_plot
+```
+
+...but the view from the South Pole shows the whole bottom row of points are 
+actually in the same place:
+
+```{r}
+grid_plot + coord_sf(crs = "+proj=laea +lat_0=-90 +ellps=WGS84 +no_defs")
+```
+
+
+### Spatial grids
+
+Thus, even on a spherical Earth, to make an equally-spaced grid would take more 
+math. Add in that the Earth is more ellipsoidal than spherical, and it is quite 
+a hard problem. Happily, someone else has already done the math.
+
+#### `geosphere::regularCoordinates`
+
+The [geosphere](https://cran.r-project.org/web/packages/geosphere/index.html) 
+package offers one possibility with its `regularCoordinates` function. Passed 
+an integer `N`, it divides the Earth N times in each direction, e.g.
+
+```{r}
+geosphere::regularCoordinates(1)
+
+geosphere::regularCoordinates(1) %>% 
+    as_data_frame() %>% 
+    ggplot(aes(lon, lat)) + 
+    geom_point()
+```
+At scale, this is cool, showing the projection at work:
+```{r}
+geosphere::regularCoordinates(45) %>% 
+    as_data_frame() %>% 
+    ggplot(aes(lon, lat)) + 
+    geom_point(stroke = 0, alpha = 0.3)
+```
+
+By reading the results into sf, we can shift the projection and plot on an 
+ellipsoid:
+```{r}
+geosphere_plot <- geosphere::regularCoordinates(10) %>% 
+    as_data_frame() %>% 
+    pmap(~st_point(c(...))) %>%    # convert each pair to an sf point
+    st_sfc(crs = 4326) %>%    # convert all points to sf column
+    st_sf() %>%    # convert to sf data frame
+    ggplot() + 
+    geom_sf()
+
+geosphere_plot + coord_sf(crs = "+proj=laea +ellps=WGS84 +no_defs")
+```
+The edges are distorted, but that's ok—it's mostly a product of the projection. 
+What matters is that the center looks reasonably grid-like, and indeed it does. 
+Setting the center at the South Pole instead shows that everything is not 
+*quite* square—the pieces at the pole are necessarily triangles, and those 
+around it are occasionally triangles and often significantly distorted. 
+
+```{r}
+geosphere_plot + coord_sf(crs = "+proj=laea +lat_0=-90 +ellps=WGS84 +no_defs")
+```
+
+Everything is still reasonably evenly spaced, though, so this is still pretty 
+usable, and a huge improvement over `expand.grid`.
+
+#### `st_make_grid`
+
+There are, though drawbacks to `regularCoordinates`. In particular, it can 
+*only* take a number of subdivisions, which is awfully inconvenient when trying 
+to set a reasonably consistent distance between points. Further, it *always* 
+returns a grid for the entire globe, even if we only need a grid over a 
+particular area.
+
+A solution to these problems is provided by `st_make_grid`, which has a 
+`cellsize` parameter and operates over the bounding box of an sf object. It can 
+also return polygons, corners, or centers, as desired.
+
+To make a grid over the continental US, first let's grab a shapefile of the 
+states and subset out the outlying states and territories^[Dear inhabitants of 
+said outlying states and territories: We still love you! Your land is just hard 
+to fit in the same plot with the continental states and district without lots 
+of blank space or separately scaled insets.]:
+
+```{r}
+states <- tigris::states(cb = TRUE) 
+
+continental_us <- states %>% 
+    filter(STUSPS %in% c('DC', state.abb[!state.abb %in% c('AK', 'HI')]))
+
+continental_us %>% select(STUSPS, NAME)
+
+ggplot(continental_us) + geom_sf()
+```
+
+Now we can use this sf object to supply a bounding box for `st_make_grid`. 
+Supposing the API sweeps 100,000m circles, we'll need a distance between points 
+of $100000*\sqrt{2}$ to ensure the full area is covered:
+
+![point grid triangle diagram](point-grid.png)
+
+Beforehand, we need to convert to a coordinate reference system that uses 
+meters so we can specify the distance between points in meters. All together,
+
+```{r}
+continental_points <- continental_us %>% 
+    st_transform(crs = 3857) %>%    # web mercator; has +units=m
+    st_make_grid(cellsize = 100000*sqrt(2), what = 'centers') %>% 
+    st_transform(crs = 4269)    # convert back
+
+continental_points
+
+continental_points %>% st_sf() %>% ggplot() + geom_sf()
+```
+
+Beautiful! We now have a grid of points covering the bounding box of the sf 
+object—not, happily, the entire globe. 
