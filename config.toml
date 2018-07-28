@@ -45,16 +45,16 @@ ignoreFiles = ["\\.Rmd$", "\\.Rmarkdown$", "_files$", "_cache$"]
   loadFavicon          = false
   faviconVersion       = ""
   # Sets Social Share links to appear on posts
-  socialShare          = true
+  socialShare          = false
   # Sets specific share to appear on posts (default behavior is to appear)
-  socialShareTwitter   = true
+  socialShareTwitter   = false
   socialShareGoogleplus = false
-  socialShareFacebook  = true
-  socialShareReddit    = true
-  socialShareLinkedin  = true
+  socialShareFacebook  = false
+  socialShareReddit    = false
+  socialShareLinkedin  = false
   socialShareStumbleupon = false
   socialSharePinterest = false
-  socialShareEmail     = true
+  socialShareEmail     = false
 
   # Load custom CSS or JavaScript files. The variable is an array so that you
   # can load multiple files if necessary. You can also load the standard theme
@@ -98,8 +98,8 @@ ignoreFiles = ["\\.Rmd$", "\\.Rmarkdown$", "_files$", "_cache$"]
   # This appears at the top of the sidebar above params.intro.header.
   # A width of less than 100px is recommended from a design perspective.
   [params.intro.pic]
-    src       = "/img/main/me.jpeg"
-    # Sets Image to be a cirlce
+    src       = "/img/main/me-crop.jpeg"
+    # Sets Image to be a circle
     circle    = false
     # Sets Image to be Future Imperfect's hexagon
     imperfect = true

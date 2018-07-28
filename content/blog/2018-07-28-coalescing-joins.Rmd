@@ -1,0 +1,141 @@
+---
+title: Coalescing joins in dplyr
+author: Edward Visel
+date: '2018-07-28'
+slug: coalescing-joins
+type: post
+categories:
+  - R
+tags:
+  - dplyr
+  - joins
+  - munging
+  - missing-data
+description: 'Filling in missing data by joining'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'Coalescing joins in dplyr'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+
+When aggregating data, it is not uncommon to need to combine datasets 
+containing identical non-key variables in varying states of completeness. There 
+are various ways to accomplish this task. One possibility an coalescing join, a 
+join in which missing values in `x` are filled with matching values from `y`. 
+Such behavior does not exist in current dplyr joins, [though it has been 
+discussed, and so may someday](https://github.com/tidyverse/tidyr/issues/183). 
+For now, let's build an `coalesce_join` function.
+
+First, some sample data:
+
+```{r sample-data, message=FALSE}
+library(dplyr)
+set.seed(47)
+
+df1 <- data_frame(
+    key  = c('a', 'b', 'c', 'd', 'e', 'f'),
+    var1 = c(  1,   2,   3,   4,  NA,  NA),
+    var2 = c( NA,  NA,  NA,  NA,   5,   6),
+    var3 = c(  1,   2,   3,   4,   5,   6)
+)
+
+df2 <- data_frame(
+    key  = c('c', 'd', 'e', 'f'),
+    var1 = c( NA,  NA,   5,   6),
+    var2 = c( NA,   4,   5,  NA),
+    var4 = c(  3,   4,   5,   6)
+)
+
+df1
+
+df2
+```
+
+The goal, then, is to get to:
+```r
+#> # A tibble: 6 x 4
+#>   key    var1  var2  var3  var4
+#>   <chr> <dbl> <dbl> <dbl> <dbl>
+#> 1 a         1    NA     1    NA
+#> 2 b         2    NA     2    NA
+#> 3 c         3    NA     3     3
+#> 4 d         4     4     4     4
+#> 5 e         5     5     5     5
+#> 6 f         6     6     6     6
+```
+
+This is still a relatively simple case, which has a single, complete key 
+variable and in which the data is identical between variables, i.e. decisions 
+about which data takes precedence are inconsequential. Those more complicated 
+cases can be handled by an extension of the logic necessary here, though.
+
+The core operation of `coalesce_join` will be done by `dplyr::coalesce`, which 
+replaces `NA` values in a vector with corresponding non-missing values from 
+another of identical length (or length 1), e.g.
+```{r coalesce}
+coalesce(
+    c( 1, 2, NA, NA), 
+    c(NA, 2,  3, NA)
+)
+```
+
+The logic we want, then, is:
+```{r logic}
+full_join(df1, df2, by = 'key') %>% 
+    mutate(
+        var1 = coalesce(var1.x, var1.y), 
+        var2 = coalesce(var2.x, var2.y)
+    ) %>% 
+    select(key, var1, var2, var3, var4)
+```
+...but without all the explicit references to specific column names. Thus, 
+written for robustness, 
+
+```{r coalesce_join}
+coalesce_join <- function(x, y, 
+                          by = NULL, suffix = c(".x", ".y"), 
+                          join = dplyr::full_join, ...) {
+    joined <- join(x, y, by = by, suffix = suffix, ...)
+    # names of desired output
+    cols <- union(names(x), names(y))
+    
+    to_coalesce <- names(joined)[!names(joined) %in% cols]
+    suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
+    # remove suffixes and deduplicate
+    to_coalesce <- unique(substr(
+        to_coalesce, 
+        1, 
+        nchar(to_coalesce) - nchar(suffix_used)
+    ))
+    
+    coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+        joined[[paste0(.x, suffix[1])]], 
+        joined[[paste0(.x, suffix[2])]]
+    ))
+    names(coalesced) <- to_coalesce
+    
+    dplyr::bind_cols(joined, coalesced)[cols]
+}
+```
+
+Let's try it out:
+
+```{r test}
+coalesce_join(df1, df2, by = 'key')
+```
+
+Beautiful!
+
+While this code could be used for an updating join, because of its structure, 
+it will always prioritize the data from `x` over `y`. More flexible (updating 
+columns from specified sources) or strict (checking equality of non-missing 
+data in coalesced columns) versions could be written, but the former would 
+require a good API for specifying data precedence, and the latter would be 
+inconsistent with the behavior of `coalesce` itself.
+
+Adapt as you like.
