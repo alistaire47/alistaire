@@ -58,7 +58,7 @@ df2
 
 The goal, then, is to get to:
 ```r
-#> # A tibble: 6 x 4
+#> # A tibble: 6 x 5
 #>   key    var1  var2  var3  var4
 #>   <chr> <dbl> <dbl> <dbl> <dbl>
 #> 1 a         1    NA     1    NA
