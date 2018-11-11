@@ -1,0 +1,229 @@
+---
+title: Fireworks
+author: Edward Visel
+date: '2018-11-11'
+slug: fireworks
+type: post
+categories:
+  - R
+  - dataviz
+  - animation
+  - generative art
+tags:
+  - r
+  - ggplot2
+  - gganimate
+  - generative art
+description: 'Animating fireworks with ggplot2 and gganimate'
+featured: 'firework-banner.png'
+featuredalt: 'firework'
+featuredpath: 'date'
+linktitle: 'Fireworks'
+---
+
+
+
+<p>Since <a href="https://twitter.com/thomasp85">Thomas Lin Pedersen</a> took over
+<a href="https://github.com/thomasp85/gganimate">gganimate</a>, I’ve been building
+animations. Mostly what I’ve built is not for any particular data visualization
+purpose. My motivations vary, but have included</p>
+<ul>
+<li>I want to try out new features of the package</li>
+<li>I’m bored</li>
+<li>I’m trying to understand trig functions in polar space</li>
+<li>I have an idea</li>
+<li>I can’t focus</li>
+<li>I want to play with matrix transformations</li>
+<li>I want to make pretty things</li>
+</ul>
+<p>…but I mostly make them because they make me happy. The results could be
+charitably called generative art, though they’re more a pale homage to artists
+deserving of the title like
+<a href="https://twitter.com/beesandbombs">@beesandbombs</a>.</p>
+<p>Today I went back to an old idea stemming from some work with spatial grids in
+<a href="https://r-spatial.github.io/sf/">sf</a>. Plotting the grids with a projection, I
+discovered that when covering the whole globe, projected grids sometimes look
+like fireworks, e.g.</p>
+<pre class="r"><code>library(tidyverse)
+library(sf)
+theme_set(hrbrthemes::theme_ipsum_ps())
+
+grid_plot &lt;- expand.grid(lon = seq(-180, 180, 10), 
+                         lat = seq(-90, 90, 10)) %&gt;% 
+    pmap(~st_point(c(...))) %&gt;%    # convert each pair to an sf point
+    st_sfc(crs = 4326) %&gt;%    # convert all points to sf column
+    st_sf() %&gt;%    # convert to sf data frame
+    ggplot() + 
+    geom_sf()
+
+grid_plot</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/sf-grid-1.png" width="672" /></p>
+<pre class="r"><code>grid_plot + coord_sf(crs = &quot;+proj=laea +lat_0=-90 +ellps=WGS84 +no_defs&quot;)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/sf-grid-2.png" width="672" /></p>
+<p>Grids as fireworks sounded like a prime candidate for animation, which I
+finally got back to today. Instead of using sf, I stuck to polar coordinates,
+which can produce a similar effect with less effort.</p>
+<p>Most of my plots were not what I wanted. Some didn’t move. Some moved too slow,
+or with the wrong acceleration. Some were just expanding rings. But here I
+present some of my more interesting failures, together with a couple results
+that could be convincingly called fireworks.</p>
+<hr />
+<div id="a-hole" class="section level2">
+<h2>A hole</h2>
+<p>Exponential decay doesn’t slow down, it goes backwards:</p>
+<pre class="r"><code>library(gganimate)
+theme_set(theme_void() + theme(
+    panel.background = element_rect(fill = &#39;black&#39;)
+))</code></pre>
+<pre class="r"><code>p &lt;- crossing(x = 1:30, nesting(t = 1:10, y = .5^(seq(t)))) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.5)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/hole-1.gif" /><!-- --></p>
+</div>
+<div id="straight" class="section level2">
+<h2>Straight</h2>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~crossing(x = 1:30, nesting(
+        y = seq(1, .x, length.out = 10)^0.5, 
+        t = 1:10
+    ))) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.3)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/straight-1.gif" /><!-- --></p>
+<p>I thought this was what I wanted, but seeing it, while it may be how we think
+fireworks look (a bunch of points shot out at equally-spaced intervals on a
+circle), it doesn’t actually look right, because fireworks aren’t circles,
+they’re spheres.</p>
+</div>
+<div id="particles-and-gnats" class="section level2">
+<h2>Particles and gnats</h2>
+<p>I couldn’t figure out the spacing, so I tried random uniform numbers instead of
+a sequence:</p>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~data_frame(y = seq(1, .x, length.out = 10), t = 1:10)) %&gt;% 
+    mutate(x = runif(n())) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.5)
+
+animate(p, nframes = 300, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/particles-1.gif" /><!-- --></p>
+<p>…which returned a bunch of weird particles, or with shorter timing</p>
+<pre class="r"><code>animate(p, nframes = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/gnats-1.gif" /><!-- --></p>
+<p>..gnat-swarm fireworks. Which are fireworks, but not the type I wanted.</p>
+</div>
+<div id="mandala" class="section level2">
+<h2>Mandala</h2>
+<p>I don’t know what happened here, but it’s trippy.</p>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~crossing(
+        x = 1:30, 
+        nesting(
+            y = runif(10), 
+            t = 1:10
+        )
+    )) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.5)
+
+animate(p, nframes = 20)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/mandala-1.gif" /><!-- --></p>
+</div>
+<div id="explosion" class="section level2">
+<h2>Explosion</h2>
+<p>Ok, this is what I meant, but it just looks like an explosion.</p>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~crossing(
+        x = runif(30), 
+        nesting(
+            y = seq(1, .x, length.out = 10)^0.5, 
+            t = 1:10)
+        )
+    ) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.5)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/explosion-1.gif" /><!-- --></p>
+</div>
+<div id="spirals" class="section level2">
+<h2>Spirals</h2>
+<p>Getting pretty close.</p>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~crossing(
+        x = {
+            x = seq(30) + 0.3*.x; 
+            ifelse(x &gt; 30, x - 30, x)
+        }, 
+        nesting(
+            y = seq(1, .x, length.out = 10)^0.5, 
+            t = 1:10)
+        )
+    ) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.3)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/spirals-1.gif" /><!-- --></p>
+</div>
+<div id="in-n-out" class="section level2">
+<h2>In-n-out</h2>
+<p>Wait what happened here</p>
+<pre class="r"><code>p &lt;- map_dfr(0:10, ~crossing(
+        x = {
+            x = seq(30) + 0.6*.x; 
+            ifelse(x &gt;= 30, x - 30, x)
+        }, 
+        nesting(
+            y = seq(1, .x, length.out = 10)^0.5, 
+            t = 1:10)
+        )
+    ) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.5)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/in-n-out-1.gif" /><!-- --></p>
+</div>
+<div id="firework" class="section level2">
+<h2>Firework</h2>
+<pre class="r"><code>p &lt;- map_dfr(1:10, ~crossing(
+        x = {
+            x = seq(30) + 0.6*.x; 
+            ifelse(x &gt; 30, x - 30, x)
+        }, 
+        nesting(
+            y = seq(1, .x, length.out = 10)^0.5, 
+            t = 1:10)
+        )
+    ) %&gt;% 
+    ggplot(aes(x, y)) + 
+    geom_point(color = &#39;white&#39;) + 
+    coord_polar() + 
+    transition_time(t) + 
+    shadow_wake(0.3)
+
+animate(p, fps = 30)</code></pre>
+<p><img src="/blog/2018-11-11-fireworks_files/figure-html/firework-1.gif" /><!-- --></p>
+<p>Yep, that’s definitely a firework. Done.</p>
+</div>
