@@ -1,0 +1,308 @@
+---
+title: 'Mapping leaves'
+author: Edward Visel
+date: '2019-01-20'
+slug: recursion
+categories:
+  - R
+  - programming
+tags:
+  - r
+  - functional-programming
+  - purrr
+  - utility
+description: 'Recursive functional programming'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'Mapping leaves: Recursive functional programming'
+type: post
+---
+
+
+
+<div id="at_depth" class="section level2">
+<h2><code>at_depth</code></h2>
+<p>I love <a href="https://purrr.tidyverse.org/">purrr</a>.<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a> Aside from
+<a href="https://alistaire.rbind.io/blog/anonymous-functions/">its anonymous function
+notation</a>, one of the
+functions that made me love the package was <code>at_depth</code>, which iterates across a
+list at a specified level of nesting. It has since been deprecated in favor of
+<code>modify_depth</code>, which is more powerful, but is significantly more finicky.</p>
+<p>The additional power is because the <code>.depth</code> parameter can now be passed a
+negative integer to index up from the bottom of the list. When I first heard
+this, I was excited, because it sounded like it could iterate across the ragged
+leaf nodes of a list. After months of trying, I still could not get it to work.
+I discovered that was because it does not iterate across leaf nodes, but instead
+selects depth by indexing up from the deepest level of the list, iterating over
+whatever nodes are at that level regardless of whether they are lists or not.</p>
+</div>
+<div id="rapply" class="section level2">
+<h2><code>rapply</code></h2>
+<p>Part of my initial excitement upon hearing that <code>modify_depth</code> could take
+negative <code>.depth</code> values was because I thought it may be less-confusing version
+of <code>rapply</code>, the second-most confusing function in base R after <code>reshape</code>.<a href="#fn2" class="footnote-ref" id="fnref2"><sup>2</sup></a> <code>rapply</code> is a recursive version of <code>lapply</code> which
+(in theory) lets you iterate a function across the leaf nodes of a list.</p>
+<p>For example:</p>
+<pre class="r"><code>library(magrittr)
+
+l &lt;- list(1, list(2:3, 4, list(5:6), 7))
+
+rapply(l, function(x) x + 1, how = &quot;replace&quot;) %&gt;% 
+    str()
+#&gt; List of 2
+#&gt;  $ : num 2
+#&gt;  $ :List of 4
+#&gt;   ..$ : num [1:2] 3 4
+#&gt;   ..$ : num 5
+#&gt;   ..$ :List of 1
+#&gt;   .. ..$ : num [1:2] 6 7
+#&gt;   ..$ : num 8</code></pre>
+<p>With the default <code>how = "unlist"</code>, <code>unlist</code> is called on the result, collapsing it:</p>
+<pre class="r"><code>rapply(l, function(x) x + 2)
+#&gt; [1] 3 4 5 6 7 8 9</code></pre>
+<p>The biggest problem with <code>rapply</code> is that it decides whether to recurse over a node or apply the function based on the behavior of <code>typeof</code> and <code>is.list</code>, not those of <code>class</code>. Consequently, it cannot operate on objects that are lists, like data frames or models—it will recurse right into them:</p>
+<pre class="r"><code>rapply(list(list(mtcars)), mean)
+#&gt;        mpg        cyl       disp         hp       drat         wt 
+#&gt;  20.090625   6.187500 230.721875 146.687500   3.596563   3.217250 
+#&gt;       qsec         vs         am       gear       carb 
+#&gt;  17.848750   0.437500   0.406250   3.687500   2.812500</code></pre>
+</div>
+<div id="mapping-over-leaf-nodes" class="section level2">
+<h2>Mapping over leaf nodes</h2>
+<p>So let’s build our own recursive map/apply function that can manage list
+objects. Sticking to purrr’s structure, we’ll make the function an S3 generic
+with a default method that will do the recursion. Objects can be differentiated
+from unclassed lists with <code>rlang::is_bare_list</code>, and <code>purrr::as_mapper</code> will let
+it handle the same variety of input structures as <code>map</code> and friends.</p>
+<pre class="r"><code>map_leaves &lt;- function(.x, .f, ...){
+    UseMethod(&quot;map_leaves&quot;)
+}
+
+map_leaves.default &lt;- function(.x, .f, ...){
+    if (rlang::is_bare_list(.x)) {
+        purrr::map(.x, map_leaves, .f, ...)    # recurse!
+    } else {
+        .f &lt;- purrr::as_mapper(.f, ...)
+        .f(.x, ...)    # call function on node
+    }
+}</code></pre>
+<p>Let’s try it out:</p>
+<pre class="r"><code>l %&gt;% map_leaves(~.x + 1) %&gt;% str()
+#&gt; List of 2
+#&gt;  $ : num 2
+#&gt;  $ :List of 4
+#&gt;   ..$ : num [1:2] 3 4
+#&gt;   ..$ : num 5
+#&gt;   ..$ :List of 1
+#&gt;   .. ..$ : num [1:2] 6 7
+#&gt;   ..$ : num 8
+
+ltcars &lt;- map_leaves(l, ~mtcars[.x, ])
+ltcars
+#&gt; [[1]]
+#&gt;           mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Mazda RX4  21   6  160 110  3.9 2.62 16.46  0  1    4    4
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]][[1]]
+#&gt;                mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; Mazda RX4 Wag 21.0   6  160 110 3.90 2.875 17.02  0  1    4    4
+#&gt; Datsun 710    22.8   4  108  93 3.85 2.320 18.61  1  1    4    1
+#&gt; 
+#&gt; [[2]][[2]]
+#&gt;                 mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; Hornet 4 Drive 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; 
+#&gt; [[2]][[3]]
+#&gt; [[2]][[3]][[1]]
+#&gt;                    mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Hornet Sportabout 18.7   8  360 175 3.15 3.44 17.02  0  0    3    2
+#&gt; Valiant           18.1   6  225 105 2.76 3.46 20.22  1  0    3    1
+#&gt; 
+#&gt; 
+#&gt; [[2]][[4]]
+#&gt;             mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Duster 360 14.3   8  360 245 3.21 3.57 15.84  0  0    3    4</code></pre>
+<p>Both of these could be done with <code>rapply</code>. But <code>rapply</code> can’t operate upon the
+data frames of <code>ltcars</code>, whereas <code>map_leaves</code> can:</p>
+<pre class="r"><code>map_leaves(ltcars, dplyr::summarise_all, mean)
+#&gt; [[1]]
+#&gt;   mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; 1  21   6  160 110  3.9 2.62 16.46  0  1    4    4
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]][[1]]
+#&gt;    mpg cyl disp    hp  drat     wt   qsec  vs am gear carb
+#&gt; 1 21.9   5  134 101.5 3.875 2.5975 17.815 0.5  1    4  2.5
+#&gt; 
+#&gt; [[2]][[2]]
+#&gt;    mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; 1 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; 
+#&gt; [[2]][[3]]
+#&gt; [[2]][[3]][[1]]
+#&gt;    mpg cyl  disp  hp  drat   wt  qsec  vs am gear carb
+#&gt; 1 18.4   7 292.5 140 2.955 3.45 18.62 0.5  0    3  1.5
+#&gt; 
+#&gt; 
+#&gt; [[2]][[4]]
+#&gt;    mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; 1 14.3   8  360 245 3.21 3.57 15.84  0  0    3    4</code></pre>
+<p>If we want to do the same thing in pure base R, it looks similar:</p>
+<pre class="r"><code>leafapply &lt;- function(X, FUN, ...){
+    if (is.list(X) &amp;&amp; is.null(attr(X, &quot;class&quot;))) {
+        lapply(X, leafapply, FUN, ...)
+    } else {
+        FUN(X, ...)
+    }
+}
+
+l %&gt;% leafapply(`+`, 1) %&gt;% str()
+#&gt; List of 2
+#&gt;  $ : num 2
+#&gt;  $ :List of 4
+#&gt;   ..$ : num [1:2] 3 4
+#&gt;   ..$ : num 5
+#&gt;   ..$ :List of 1
+#&gt;   .. ..$ : num [1:2] 6 7
+#&gt;   ..$ : num 8
+
+ltcars &lt;- leafapply(l, function(x) mtcars[x, ])
+ltcars
+#&gt; [[1]]
+#&gt;           mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Mazda RX4  21   6  160 110  3.9 2.62 16.46  0  1    4    4
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]][[1]]
+#&gt;                mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; Mazda RX4 Wag 21.0   6  160 110 3.90 2.875 17.02  0  1    4    4
+#&gt; Datsun 710    22.8   4  108  93 3.85 2.320 18.61  1  1    4    1
+#&gt; 
+#&gt; [[2]][[2]]
+#&gt;                 mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; Hornet 4 Drive 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; 
+#&gt; [[2]][[3]]
+#&gt; [[2]][[3]][[1]]
+#&gt;                    mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Hornet Sportabout 18.7   8  360 175 3.15 3.44 17.02  0  0    3    2
+#&gt; Valiant           18.1   6  225 105 2.76 3.46 20.22  1  0    3    1
+#&gt; 
+#&gt; 
+#&gt; [[2]][[4]]
+#&gt;             mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; Duster 360 14.3   8  360 245 3.21 3.57 15.84  0  0    3    4
+
+leafapply(ltcars, function(x) aggregate(. ~ 1, x, mean))
+#&gt; [[1]]
+#&gt;   mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; 1  21   6  160 110  3.9 2.62 16.46  0  1    4    4
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]][[1]]
+#&gt;    mpg cyl disp    hp  drat     wt   qsec  vs am gear carb
+#&gt; 1 21.9   5  134 101.5 3.875 2.5975 17.815 0.5  1    4  2.5
+#&gt; 
+#&gt; [[2]][[2]]
+#&gt;    mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; 1 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; 
+#&gt; [[2]][[3]]
+#&gt; [[2]][[3]][[1]]
+#&gt;    mpg cyl  disp  hp  drat   wt  qsec  vs am gear carb
+#&gt; 1 18.4   7 292.5 140 2.955 3.45 18.62 0.5  0    3  1.5
+#&gt; 
+#&gt; 
+#&gt; [[2]][[4]]
+#&gt;    mpg cyl disp  hp drat   wt  qsec vs am gear carb
+#&gt; 1 14.3   8  360 245 3.21 3.57 15.84  0  0    3    4</code></pre>
+</div>
+<div id="collapsing-lists-but-not-list-objects" class="section level2">
+<h2>Collapsing lists but not list objects</h2>
+<p>Neither <code>map_leaves</code> nor <code>leafapply</code> can condense the results like <code>rapply</code>
+does with <code>how = "unlist"</code>, though. <code>unlist</code> itself won’t work, because it
+also ignores list objects. To collapse recursively, we need to write a smarter
+version of <code>unlist</code>.</p>
+<p>In this case, we need to recurse over sublists of the input (and, because it is
+recursive, potentially sublists of sublists), and then collapse the recursively
+flattened list. We can use a similar test to <code>map_leaves</code> and <code>leafapply</code> to
+identify sublists, but we also need a function to collapse each flat list. To
+imitate <code>unlist</code>, this would be <code>c</code>, applied with <code>purrr::invoke</code> or <code>do.call</code>.
+But it makes sense to make this function user-settable, because for other data
+types, different collapsing functions will allow more forms of collapsing.</p>
+<pre class="r"><code>deflate &lt;- function(.x, .f, ...){
+    UseMethod(&quot;deflate&quot;)
+}
+
+deflate.default &lt;- function(.x, .f, ...){
+    .f &lt;- purrr::as_mapper(.f)
+    is_sublist &lt;- purrr::map_lgl(.x, rlang::is_bare_list)
+    .x[is_sublist] &lt;- purrr::map(.x[is_sublist], deflate, .f, ...)
+    purrr::invoke(.f, .x, ...)
+}</code></pre>
+<p><code>deflate</code> can imitate <code>unlist</code>:</p>
+<pre class="r"><code>deflate(l, c)
+#&gt; [1] 1 2 3 4 5 6 7</code></pre>
+<p>But because it can take different collapsing functions, it can also do fancier<br />
+collapsing more appropriate for, say, data frames:</p>
+<pre class="r"><code>deflate(ltcars, dplyr::bind_rows)
+#&gt;    mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; 1 21.0   6  160 110 3.90 2.620 16.46  0  1    4    4
+#&gt; 2 21.0   6  160 110 3.90 2.875 17.02  0  1    4    4
+#&gt; 3 22.8   4  108  93 3.85 2.320 18.61  1  1    4    1
+#&gt; 4 21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; 5 18.7   8  360 175 3.15 3.440 17.02  0  0    3    2
+#&gt; 6 18.1   6  225 105 2.76 3.460 20.22  1  0    3    1
+#&gt; 7 14.3   8  360 245 3.21 3.570 15.84  0  0    3    4</code></pre>
+<p>Again, we can write the same thing in base R:</p>
+<pre class="r"><code>Deflate &lt;- function(f, x, ...){
+    is_sublist &lt;- vapply(x, function(y) is.list(y) &amp;&amp; is.null(attr(y, &quot;class&quot;)), logical(1))
+    x[is_sublist] &lt;- lapply(x[is_sublist], Deflate, f = f, ...)
+    do.call(f, c(x, ...))
+}
+
+Deflate(c, l)
+#&gt; [1] 1 2 3 4 5 6 7
+Deflate(rbind, ltcars)
+#&gt;                    mpg cyl disp  hp drat    wt  qsec vs am gear carb
+#&gt; Mazda RX4         21.0   6  160 110 3.90 2.620 16.46  0  1    4    4
+#&gt; Mazda RX4 Wag     21.0   6  160 110 3.90 2.875 17.02  0  1    4    4
+#&gt; Datsun 710        22.8   4  108  93 3.85 2.320 18.61  1  1    4    1
+#&gt; Hornet 4 Drive    21.4   6  258 110 3.08 3.215 19.44  1  0    3    1
+#&gt; Hornet Sportabout 18.7   8  360 175 3.15 3.440 17.02  0  0    3    2
+#&gt; Valiant           18.1   6  225 105 2.76 3.460 20.22  1  0    3    1
+#&gt; Duster 360        14.3   8  360 245 3.21 3.570 15.84  0  0    3    4</code></pre>
+<p>Exciting!</p>
+</div>
+<div id="next-steps" class="section level2">
+<h2>Next steps</h2>
+<p>Some possible extensions:</p>
+<ul>
+<li>Both functions could be combined into one to mimic <code>rapply</code> more directly. I
+like the modular, composable form, though; it fits <a href="https://en.wikipedia.org/wiki/Unix_philosophy">the Unix
+philosophy</a> nicely.</li>
+<li>A <code>class</code> parameter <em>à la</em> <code>rapply</code> could be added to <code>map_leaves</code> (and made
+way more useful than <code>rapply</code>’s). Presumably for <code>map_leaves</code>, nodes that don’t
+match the class should be ignored; for <code>deflate</code> they should be subsetted out.</li>
+<li>Make a version of <code>eapply</code> that takes a <code>class</code> parameter.</li>
+<li>A version of <code>map_leaves</code> that indexes up from each leaf node could be
+created. While powerful, this has a lot of potential to be finicky to use.</li>
+<li>Make new methods for similar objects like dendrograms <em>à la</em> <code>dendrapply</code>.</li>
+<li>Put all these functions in a package, if people will use it.</li>
+<li>Something else? Add a comment or ping me <a href="https://twitter.com/alistaire">on Twitter</a>!</li>
+</ul>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>I’m also very fond of <code>Map</code> and
+<code>Reduce</code> and so on, so maybe I just like functional programming.<a href="#fnref1" class="footnote-back">↩</a></p></li>
+<li id="fn2"><p>I
+can now get <code>rapply</code> to work about half the time, and even used it usefully
+once. I have never gotten <code>reshape</code> to do what I want. I’ve seen other people
+make it work, so I know it <em>can</em> function, but for the life of me I can’t
+understand its parameters.<a href="#fnref2" class="footnote-back">↩</a></p></li>
+</ol>
+</div>

@@ -1,0 +1,207 @@
+---
+title: 'Mapping leaves'
+author: Edward Visel
+date: '2019-01-20'
+slug: recursion
+categories:
+  - R
+  - programming
+tags:
+  - r
+  - functional-programming
+  - purrr
+  - utility
+description: 'Recursive functional programming'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'Mapping leaves: Recursive functional programming'
+type: post
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+```
+
+## `at_depth`
+
+I love [purrr](https://purrr.tidyverse.org/).^[I'm also very fond of `Map` and
+`Reduce` and so on, so maybe I just like functional programming.] Aside from 
+[its anonymous function 
+notation](https://alistaire.rbind.io/blog/anonymous-functions/), one of the
+functions that made me love the package was `at_depth`, which iterates across a
+list at a specified level of nesting. It has since been deprecated in favor of
+`modify_depth`, which is more powerful, but is significantly more finicky.
+
+The additional power is because the `.depth` parameter can now be passed a
+negative integer to index up from the bottom of the list. When I first heard
+this, I was excited, because it sounded like it could iterate across the ragged
+leaf nodes of a list. After months of trying, I still could not get it to work.
+I discovered that was because it does not iterate across leaf nodes, but instead
+selects depth by indexing up from the deepest level of the list, iterating over
+whatever nodes are at that level regardless of whether they are lists or not.
+
+## `rapply`
+
+Part of my initial excitement upon hearing that `modify_depth` could take
+negative `.depth` values was because I thought it may be less-confusing version
+of `rapply`, the second-most confusing function in base R after `reshape`.^[I
+can now get `rapply` to work about half the time, and even used it usefully
+once. I have never gotten `reshape` to do what I want. I've seen other people
+make it work, so I know it *can* function, but for the life of me I can't
+understand its parameters.] `rapply` is a recursive version of `lapply` which
+(in theory) lets you iterate a function across the leaf nodes of a list.
+
+For example:
+
+```{r rapply}
+library(magrittr)
+
+l <- list(1, list(2:3, 4, list(5:6), 7))
+
+rapply(l, function(x) x + 1, how = "replace") %>% 
+    str()
+```
+
+With the default `how = "unlist"`, `unlist` is called on the result, collapsing it:
+
+```{r rapply-unlist}
+rapply(l, function(x) x + 2)
+```
+
+The biggest problem with `rapply` is that it decides whether to recurse over a node or apply the function based on the behavior of `typeof` and `is.list`, not those of `class`. Consequently, it cannot operate on objects that are lists, like data frames or models—it will recurse right into them:
+
+```{r rapply-data-frame}
+rapply(list(list(mtcars)), mean)
+```
+
+## Mapping over leaf nodes
+
+So let's build our own recursive map/apply function that can manage list
+objects. Sticking to purrr's structure, we'll make the function an S3 generic
+with a default method that will do the recursion. Objects can be differentiated
+from unclassed lists with `rlang::is_bare_list`, and `purrr::as_mapper` will let
+it handle the same variety of input structures as `map` and friends.
+
+```{r map_leaves}
+map_leaves <- function(.x, .f, ...){
+    UseMethod("map_leaves")
+}
+
+map_leaves.default <- function(.x, .f, ...){
+    if (rlang::is_bare_list(.x)) {
+        purrr::map(.x, map_leaves, .f, ...)    # recurse!
+    } else {
+        .f <- purrr::as_mapper(.f, ...)
+        .f(.x, ...)    # call function on node
+    }
+}
+```
+
+Let's try it out:
+
+```{r map_leaves-demo-1}
+l %>% map_leaves(~.x + 1) %>% str()
+
+ltcars <- map_leaves(l, ~mtcars[.x, ])
+ltcars
+```
+
+Both of these could be done with `rapply`. But `rapply` can't operate upon the 
+data frames of `ltcars`, whereas `map_leaves` can:
+
+```{r map_leaves-demo-2}
+map_leaves(ltcars, dplyr::summarise_all, mean)
+```
+
+If we want to do the same thing in pure base R, it looks similar:
+
+```{r}
+leafapply <- function(X, FUN, ...){
+    if (is.list(X) && is.null(attr(X, "class"))) {
+        lapply(X, leafapply, FUN, ...)
+    } else {
+        FUN(X, ...)
+    }
+}
+
+l %>% leafapply(`+`, 1) %>% str()
+
+ltcars <- leafapply(l, function(x) mtcars[x, ])
+ltcars
+
+leafapply(ltcars, function(x) aggregate(. ~ 1, x, mean))
+```
+
+## Collapsing lists but not list objects
+
+Neither `map_leaves` nor `leafapply` can condense the results like `rapply` 
+does with `how = "unlist"`, though. `unlist` itself won't work, because it 
+also ignores list objects. To collapse recursively, we need to write a smarter 
+version of `unlist`.
+
+In this case, we need to recurse over sublists of the input (and, because it is
+recursive, potentially sublists of sublists), and then collapse the recursively
+flattened list. We can use a similar test to `map_leaves` and `leafapply` to
+identify sublists, but we also need a function to collapse each flat list. To
+imitate `unlist`, this would be `c`, applied with `purrr::invoke` or `do.call`.
+But it makes sense to make this function user-settable, because for other data
+types, different collapsing functions will allow more forms of collapsing.
+
+```{r deflate}
+deflate <- function(.x, .f, ...){
+    UseMethod("deflate")
+}
+
+deflate.default <- function(.x, .f, ...){
+    .f <- purrr::as_mapper(.f)
+    is_sublist <- purrr::map_lgl(.x, rlang::is_bare_list)
+    .x[is_sublist] <- purrr::map(.x[is_sublist], deflate, .f, ...)
+    purrr::invoke(.f, .x, ...)
+}
+```
+
+`deflate` can imitate `unlist`:
+
+```{r deflate-c}
+deflate(l, c)
+```
+
+But because it can take different collapsing functions, it can also do fancier  
+collapsing more appropriate for, say, data frames:
+
+```{r deflate-bind_rows}
+deflate(ltcars, dplyr::bind_rows)
+```
+
+Again, we can write the same thing in base R:
+
+```{r Deflate}
+Deflate <- function(f, x, ...){
+    is_sublist <- vapply(x, function(y) is.list(y) && is.null(attr(y, "class")), logical(1))
+    x[is_sublist] <- lapply(x[is_sublist], Deflate, f = f, ...)
+    do.call(f, c(x, ...))
+}
+
+Deflate(c, l)
+Deflate(rbind, ltcars)
+```
+
+Exciting!
+
+## Next steps
+
+Some possible extensions:
+
+- Both functions could be combined into one to mimic `rapply` more directly. I
+like the modular, composable form, though; it fits [the Unix
+philosophy](https://en.wikipedia.org/wiki/Unix_philosophy) nicely.
+- A `class` parameter *à la* `rapply` could be added to `map_leaves` (and made 
+way more useful than `rapply`'s). Presumably for `map_leaves`, nodes that don't 
+match the class should be ignored; for `deflate` they should be subsetted out.
+- Make a version of `eapply` that takes a `class` parameter.
+- A version of `map_leaves` that indexes up from each leaf node could be 
+created. While powerful, this has a lot of potential to be finicky to use.
+- Make new methods for similar objects like dendrograms *à la* `dendrapply`.
+- Put all these functions in a package, if people will use it.
+- Something else? Add a comment or ping me [on Twitter](https://twitter.com/alistaire)!
