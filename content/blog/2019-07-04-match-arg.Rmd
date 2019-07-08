@@ -1,0 +1,302 @@
+---
+title: match.arg
+author: Edward Visel
+date: '2019-07-04'
+slug: match.arg
+categories:
+  - R
+  - programming
+tags:
+  - functions
+  - utility
+description: 'A weird function that can help you write better functions'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'match.arg: A weird function that can help you write better functions'
+type: post
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+```
+
+
+Lately I've been working with a lot of people whose first language is not R, 
+which has given me more of an appreciation for R's oddities. Some in retrospect 
+were probably ill-advised, like partial matching with `$`:
+
+```{r partial-matching}
+mtcars$disp
+mtcars$di
+mtcars$d    # Bonus points if you knew what this would do.
+```
+
+Some are comparatively weird, but function fine, like that R doesn't care if 
+keyword arguments come before positional ones; it just extracts keywords first 
+and then matches positions:
+
+```{r positional-args}
+mean(x = c(1, NA, 3), 0, TRUE)
+mean(na.rm = TRUE, c(1, NA, 3))
+```
+
+But some are weird, but actually really convenient and great, which brings us 
+to the subject of this post: `match.arg`.
+
+`match.arg` is a function that only works in functions, and thus is not itself 
+a function people tend to encounter until they try to write code for other 
+people. (You _could_ use it in functions you write for yourself, but it matters 
+less, for reasons that will become apparent in a moment.) It's also a function 
+that's baked into much of R's DNA, so to speak.
+
+For instance, if you look at the documentation for `?optim`, base R's 
+general-purpose optimization function, its "Usage" section looks like this:
+
+```r
+optim(par, fn, gr = NULL, ...,
+      method = c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN",
+                 "Brent"),
+      lower = -Inf, upper = Inf,
+      control = list(), hessian = FALSE)
+```
+
+Something there is a little funny: Why is the default of `method` a vector of 
+six methods? Is it going to run six different ways? The argument documentation 
+seems to suggest otherwise:
+
+> `method`    The method to be used. See ‘Details’. Can be abbreviated.
+
+"Details" confirms:
+
+> The default method is an implementation of that of Nelder and Mead (1965), 
+> that uses only function values and is robust but relatively slow. It will 
+> work reasonably well for non-differentiable functions.
+
+It then describes `"BFGS"`, `"CG"`, etc. as alternative methods, which makes 
+sense—the documentation is telling us all the possible alternatives. But 
+there's still something weird here: Is the default really a vector of length 6? 
+Or is that just a documentation nicety, and the signature of the function 
+_actually_ contains `method = "Nelder-Mead"`?
+
+A quick investigation reveals that it's not just a nicety—the actual default is 
+a vector of length 6
+
+```{r optim-args}
+args(optim)
+```
+
+...but somehow that turns into a default of `"Nelder-Mead"`. How? The culprit 
+is a few lines into the body of the function:
+
+```{r optim-body}
+head(optim, 8)
+```
+
+What does 
+```r
+method <- match.arg(method)
+```
+do?
+
+Starting at `?match.arg`, it tells us it does "argument verification using 
+partial matching". More particularly, 
+
+> `match.arg` matches `arg` against a table of candidate values as specified by 
+> `choices`, where `NULL` means to take the first one.^[This `NULL` bit is 
+confusing, even if you come back after reading everything. It refers to a call 
+like `match.arg(NULL, c("deviled eggs", "potato salad"))`, but the function 
+rarely gets used that way. The "take the first one" bit matters, though, 
+because this is the behavior if `choices` isn't passed, as is explained later.]
+
+The "Usage" section confirms that `optim` _definitely_ isn't running six 
+methods by default:
+
+```r
+match.arg(arg, choices, several.ok = FALSE)
+```
+
+Ok, this seems to make some sense—`match.arg` checks whether an argument to a 
+function is within a list of possibilities. Let's try it out:
+
+```{r check-args, error=TRUE}
+check_is_us_flag_color <- function(color){
+    match.arg(color, c("red", "white", "blue"))
+}
+
+check_is_us_flag_color("blue")
+tryCatch(
+    check_is_us_flag_color("orange"),
+    error = identity
+)
+```
+
+Ooh, look, we even get informative error messages! How nice.
+
+It's supposed to do partial matching too. Let's try: 
+
+```{r}
+check_is_fourth_of_july_activity <- function(activity){
+    match.arg(activity, choices = c(
+        "watch a parade",
+        "barbeque in the park",
+        "watch fireworks"
+    ))
+}
+
+check_is_fourth_of_july_activity("watch fireworks")    # Still works.
+check_is_fourth_of_july_activity("barbeque")    # Works too!
+tryCatch(
+    check_is_fourth_of_july_activity("watch"),    # Doesn't work. That's good.
+    error = identity
+)
+```
+
+This could be useful! It encourages us to use descriptive options like 
+`"Nelder-Mead"`, but if people don't want to type that all the time, they can 
+just type the unambiguous `"Nelder"`, and that will work fine. Also, such a 
+sophisticated approach still takes very little effort from the person writing 
+the function, which is awfully nice.
+
+<details><summary>
+If you want to understand the details of precisely _how_ `match.arg` handles 
+partial matches</summary>, the documentation says
+
+> Matching is done using `pmatch`, so `arg` may be abbreviated.
+
+Clicking through and trying out `pmatch` shows it's pretty simple—it's not 
+fuzzy matching _à la_ `agrep`, just matching from the beginning of strings.
+</details>
+
+Ok, now we've got a grasp of how `match.arg` works, but that still doesn't 
+explain how that line from `optim` works:
+
+```r
+method <- match.arg(method)
+```
+
+There are no choices specified! `?match.arg` gives us a hint:
+
+> In the one-argument form `match.arg(arg)`, the choices are obtained from a 
+> default setting for the formal argument `arg` of the function from which 
+> `match.arg` was called. (Since default argument matching will set `arg` to 
+> `choices`, this is allowed as an exception to the ‘length one unless 
+> `several.ok` is `TRUE`’ rule, and returns the first element.)
+
+There's a lot going on here. This directly answers one question: What happens 
+if `method` is not set? In this case, it will return the first element, which 
+is why the default is in fact `"Nelder-Mead"`. 
+
+_Even if you never use `match.arg`, this behavior is a good thing to 
+understand,_ because you'll see documentation like this everywhere: 
+`?read.table`, `?png`, `?order`, `?t.test`, `?ggplot2::position_dodge`, 
+`?tidyr::fill`, `?data.table::shift`, etc., etc., etc.
+
+But there are two possibilities here:
+
+- no argument is passed, and `match.arg` gets the full length-6 vector, or
+- an argument is passed, and `match.arg` is only passed one string.
+
+Taking the first element of a vector explains how the first possibility works:
+
+```{r first-is-default}
+check_good_firework <- function(firework = c('bottle rocket', 'roman candle', 'ones that require a license')){
+    match.arg(firework)
+}
+
+check_good_firework()
+```
+
+`match.arg` is passed the full vector for `firework`, and picks the first one. 
+But is it using that vector for choices? Let's see:
+
+```{r first-is-default-2}
+check_good_firework(c('bottle rocket', 'roman candle', 'ones that require a license'))
+tryCatch(
+    check_good_firework(c('snake', 'M80')), 
+    error = identity
+)
+```
+
+Hmm, so it _is_ getting the choices from somewhere. That's good, as it explains 
+how the case in which an argument is passed is handled. But where is 
+`match.arg` getting the options if they aren't passed to it? The docs, one more 
+time:
+
+> In the one-argument form `match.arg(arg)`, the choices are obtained from a 
+> default setting for the formal argument `arg` of the function from which 
+> `match.arg` was called.
+
+Ah, "the formal argument `arg` of the function from which `match.arg` was 
+called". But what's a "formal argument"? The details get a little 
+hairy^[Technically only closures have formals, not primitive functions. Go read 
+about the difference if you like, but it rarely matters from a user 
+perspective.], but essentially formals are the stuff you put in the parentheses 
+after `function`. There's even a sensibly-named function to get them, should 
+you need:
+
+```{r formals}
+str(formals(optim))
+```
+
+Notice this is not quite a normal list—some elements are empty (like `par` and 
+`fn`), and `...` is actually the name of an element (that doesn't exist). It is 
+a list, but this is the topsy-turvy world of operating on the language, so this 
+is a _pairlist_, which only much ever gets used for messing with the structure 
+of functions.^[Try playing around with `alist` and you'll start to see what's 
+going on.]
+
+Regardless, we can see that `method` is there with its default. The source of 
+`match.arg` shows how it gets the default to use for `choices`:
+
+```{r}
+head(match.arg, 7)
+```
+
+This code is both complicated and hairy (please don't use `<-` in function 
+calls), but we can see that `sys.function` gets the calling function, and 
+`formals` extracts the formal arguments. Lines 5-6 extract the argument from 
+those formals.
+
+Ignoring the environment-handling stuff, let's try it out:
+
+```{r sys.function}
+show_function <- function(x, y = c("foo", "bar")){
+    sys.function()
+}
+
+show_function()
+
+fmls <- formals(show_function())
+str(fmls)
+
+fmls$y    # This is still a language object...
+eval(fmls$y)    # ...so evaluate it to make it a real object
+```
+
+Cool! This code explains the remaining mystery of `match.arg`: When only passed 
+an argument, it grabs the default argument for that parameter and uses it as 
+`choices`. That also explains why `match.arg` only works in a function if 
+`choices` is not specified:
+
+```{r not-in-function}
+tryCatch(
+    match.arg(c("bratwurst", "hot dog", "hamburger")),
+    error = identity
+)
+```
+
+So when should you use `match.arg`? When you're writing a function with a 
+parameter that can take one of a fairly small number of string values. In 
+return, 
+
+- your function will error informatively if passed an incorrect value (instead 
+of breaking wherever it gets used),
+- users get convenient partial-matching,  
+- if you put the choices as the default, the possible choices will be very 
+clear (to people who know about `match.arg`), and
+- your friends coming from Python will reinforce their belief that R is 
+strange, but will be unable to reproduce the behavior in Python without 
+significant code.
+
+So is R quirky? Yep. But that's not all bad.

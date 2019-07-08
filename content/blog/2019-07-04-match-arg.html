@@ -1,0 +1,294 @@
+---
+title: match.arg
+author: Edward Visel
+date: '2019-07-04'
+slug: match.arg
+categories:
+  - R
+  - programming
+tags:
+  - functions
+  - utility
+description: 'A weird function that can help you write better functions'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'match.arg: A weird function that can help you write better functions'
+type: post
+---
+
+
+
+<p>Lately I’ve been working with a lot of people whose first language is not R,
+which has given me more of an appreciation for R’s oddities. Some in retrospect
+were probably ill-advised, like partial matching with <code>$</code>:</p>
+<pre class="r"><code>mtcars$disp
+#&gt;  [1] 160.0 160.0 108.0 258.0 360.0 225.0 360.0 146.7 140.8 167.6 167.6
+#&gt; [12] 275.8 275.8 275.8 472.0 460.0 440.0  78.7  75.7  71.1 120.1 318.0
+#&gt; [23] 304.0 350.0 400.0  79.0 120.3  95.1 351.0 145.0 301.0 121.0
+mtcars$di
+#&gt;  [1] 160.0 160.0 108.0 258.0 360.0 225.0 360.0 146.7 140.8 167.6 167.6
+#&gt; [12] 275.8 275.8 275.8 472.0 460.0 440.0  78.7  75.7  71.1 120.1 318.0
+#&gt; [23] 304.0 350.0 400.0  79.0 120.3  95.1 351.0 145.0 301.0 121.0
+mtcars$d    # Bonus points if you knew what this would do.
+#&gt; NULL</code></pre>
+<p>Some are comparatively weird, but function fine, like that R doesn’t care if
+keyword arguments come before positional ones; it just extracts keywords first
+and then matches positions:</p>
+<pre class="r"><code>mean(x = c(1, NA, 3), 0, TRUE)
+#&gt; [1] 2
+mean(na.rm = TRUE, c(1, NA, 3))
+#&gt; [1] 2</code></pre>
+<p>But some are weird, but actually really convenient and great, which brings us
+to the subject of this post: <code>match.arg</code>.</p>
+<p><code>match.arg</code> is a function that only works in functions, and thus is not itself
+a function people tend to encounter until they try to write code for other
+people. (You <em>could</em> use it in functions you write for yourself, but it matters
+less, for reasons that will become apparent in a moment.) It’s also a function
+that’s baked into much of R’s DNA, so to speak.</p>
+<p>For instance, if you look at the documentation for <code>?optim</code>, base R’s
+general-purpose optimization function, its “Usage” section looks like this:</p>
+<pre class="r"><code>optim(par, fn, gr = NULL, ...,
+      method = c(&quot;Nelder-Mead&quot;, &quot;BFGS&quot;, &quot;CG&quot;, &quot;L-BFGS-B&quot;, &quot;SANN&quot;,
+                 &quot;Brent&quot;),
+      lower = -Inf, upper = Inf,
+      control = list(), hessian = FALSE)</code></pre>
+<p>Something there is a little funny: Why is the default of <code>method</code> a vector of
+six methods? Is it going to run six different ways? The argument documentation
+seems to suggest otherwise:</p>
+<blockquote>
+<p><code>method</code> The method to be used. See ‘Details’. Can be abbreviated.</p>
+</blockquote>
+<p>“Details” confirms:</p>
+<blockquote>
+<p>The default method is an implementation of that of Nelder and Mead (1965),
+that uses only function values and is robust but relatively slow. It will
+work reasonably well for non-differentiable functions.</p>
+</blockquote>
+<p>It then describes <code>"BFGS"</code>, <code>"CG"</code>, etc. as alternative methods, which makes
+sense—the documentation is telling us all the possible alternatives. But
+there’s still something weird here: Is the default really a vector of length 6?
+Or is that just a documentation nicety, and the signature of the function
+<em>actually</em> contains <code>method = "Nelder-Mead"</code>?</p>
+<p>A quick investigation reveals that it’s not just a nicety—the actual default is
+a vector of length 6</p>
+<pre class="r"><code>args(optim)
+#&gt; function (par, fn, gr = NULL, ..., method = c(&quot;Nelder-Mead&quot;, 
+#&gt;     &quot;BFGS&quot;, &quot;CG&quot;, &quot;L-BFGS-B&quot;, &quot;SANN&quot;, &quot;Brent&quot;), lower = -Inf, 
+#&gt;     upper = Inf, control = list(), hessian = FALSE) 
+#&gt; NULL</code></pre>
+<p>…but somehow that turns into a default of <code>"Nelder-Mead"</code>. How? The culprit
+is a few lines into the body of the function:</p>
+<pre class="r"><code>head(optim, 8)
+#&gt;                                                                 
+#&gt; 1 function (par, fn, gr = NULL, ..., method = c(&quot;Nelder-Mead&quot;,  
+#&gt; 2     &quot;BFGS&quot;, &quot;CG&quot;, &quot;L-BFGS-B&quot;, &quot;SANN&quot;, &quot;Brent&quot;), lower = -Inf, 
+#&gt; 3     upper = Inf, control = list(), hessian = FALSE)           
+#&gt; 4 {                                                             
+#&gt; 5     fn1 &lt;- function(par) fn(par, ...)                         
+#&gt; 6     gr1 &lt;- if (!is.null(gr))                                  
+#&gt; 7         function(par) gr(par, ...)                            
+#&gt; 8     method &lt;- match.arg(method)</code></pre>
+<p>What does</p>
+<pre class="r"><code>method &lt;- match.arg(method)</code></pre>
+<p>do?</p>
+<p>Starting at <code>?match.arg</code>, it tells us it does “argument verification using
+partial matching”. More particularly,</p>
+<blockquote>
+<p><code>match.arg</code> matches <code>arg</code> against a table of candidate values as specified by
+<code>choices</code>, where <code>NULL</code> means to take the first one.<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a></p>
+</blockquote>
+<p>The “Usage” section confirms that <code>optim</code> <em>definitely</em> isn’t running six
+methods by default:</p>
+<pre class="r"><code>match.arg(arg, choices, several.ok = FALSE)</code></pre>
+<p>Ok, this seems to make some sense—<code>match.arg</code> checks whether an argument to a
+function is within a list of possibilities. Let’s try it out:</p>
+<pre class="r"><code>check_is_us_flag_color &lt;- function(color){
+    match.arg(color, c(&quot;red&quot;, &quot;white&quot;, &quot;blue&quot;))
+}
+
+check_is_us_flag_color(&quot;blue&quot;)
+#&gt; [1] &quot;blue&quot;
+tryCatch(
+    check_is_us_flag_color(&quot;orange&quot;),
+    error = identity
+)
+#&gt; &lt;simpleError in match.arg(color, c(&quot;red&quot;, &quot;white&quot;, &quot;blue&quot;)): &#39;arg&#39; should be one of &quot;red&quot;, &quot;white&quot;, &quot;blue&quot;&gt;</code></pre>
+<p>Ooh, look, we even get informative error messages! How nice.</p>
+<p>It’s supposed to do partial matching too. Let’s try:</p>
+<pre class="r"><code>check_is_fourth_of_july_activity &lt;- function(activity){
+    match.arg(activity, choices = c(
+        &quot;watch a parade&quot;,
+        &quot;barbeque in the park&quot;,
+        &quot;watch fireworks&quot;
+    ))
+}
+
+check_is_fourth_of_july_activity(&quot;watch fireworks&quot;)    # Still works.
+#&gt; [1] &quot;watch fireworks&quot;
+check_is_fourth_of_july_activity(&quot;barbeque&quot;)    # Works too!
+#&gt; [1] &quot;barbeque in the park&quot;
+tryCatch(
+    check_is_fourth_of_july_activity(&quot;watch&quot;),    # Doesn&#39;t work. That&#39;s good.
+    error = identity
+)
+#&gt; &lt;simpleError in match.arg(activity, choices = c(&quot;watch a parade&quot;, &quot;barbeque in the park&quot;,     &quot;watch fireworks&quot;)): &#39;arg&#39; should be one of &quot;watch a parade&quot;, &quot;barbeque in the park&quot;, &quot;watch fireworks&quot;&gt;</code></pre>
+<p>This could be useful! It encourages us to use descriptive options like
+<code>"Nelder-Mead"</code>, but if people don’t want to type that all the time, they can
+just type the unambiguous <code>"Nelder"</code>, and that will work fine. Also, such a
+sophisticated approach still takes very little effort from the person writing
+the function, which is awfully nice.</p>
+<details>
+<p><summary>
+If you want to understand the details of precisely <em>how</em> <code>match.arg</code> handles
+partial matches</summary>, the documentation says</p>
+<blockquote>
+<p>Matching is done using <code>pmatch</code>, so <code>arg</code> may be abbreviated.</p>
+</blockquote>
+Clicking through and trying out <code>pmatch</code> shows it’s pretty simple—it’s not
+fuzzy matching <em>à la</em> <code>agrep</code>, just matching from the beginning of strings.
+</details>
+<p>Ok, now we’ve got a grasp of how <code>match.arg</code> works, but that still doesn’t
+explain how that line from <code>optim</code> works:</p>
+<pre class="r"><code>method &lt;- match.arg(method)</code></pre>
+<p>There are no choices specified! <code>?match.arg</code> gives us a hint:</p>
+<blockquote>
+<p>In the one-argument form <code>match.arg(arg)</code>, the choices are obtained from a
+default setting for the formal argument <code>arg</code> of the function from which
+<code>match.arg</code> was called. (Since default argument matching will set <code>arg</code> to
+<code>choices</code>, this is allowed as an exception to the ‘length one unless
+<code>several.ok</code> is <code>TRUE</code>’ rule, and returns the first element.)</p>
+</blockquote>
+<p>There’s a lot going on here. This directly answers one question: What happens
+if <code>method</code> is not set? In this case, it will return the first element, which
+is why the default is in fact <code>"Nelder-Mead"</code>.</p>
+<p><em>Even if you never use <code>match.arg</code>, this behavior is a good thing to
+understand,</em> because you’ll see documentation like this everywhere:
+<code>?read.table</code>, <code>?png</code>, <code>?order</code>, <code>?t.test</code>, <code>?ggplot2::position_dodge</code>,
+<code>?tidyr::fill</code>, <code>?data.table::shift</code>, etc., etc., etc.</p>
+<p>But there are two possibilities here:</p>
+<ul>
+<li>no argument is passed, and <code>match.arg</code> gets the full length-6 vector, or</li>
+<li>an argument is passed, and <code>match.arg</code> is only passed one string.</li>
+</ul>
+<p>Taking the first element of a vector explains how the first possibility works:</p>
+<pre class="r"><code>check_good_firework &lt;- function(firework = c(&#39;bottle rocket&#39;, &#39;roman candle&#39;, &#39;ones that require a license&#39;)){
+    match.arg(firework)
+}
+
+check_good_firework()
+#&gt; [1] &quot;bottle rocket&quot;</code></pre>
+<p><code>match.arg</code> is passed the full vector for <code>firework</code>, and picks the first one.
+But is it using that vector for choices? Let’s see:</p>
+<pre class="r"><code>check_good_firework(c(&#39;bottle rocket&#39;, &#39;roman candle&#39;, &#39;ones that require a license&#39;))
+#&gt; [1] &quot;bottle rocket&quot;
+tryCatch(
+    check_good_firework(c(&#39;snake&#39;, &#39;M80&#39;)), 
+    error = identity
+)
+#&gt; &lt;simpleError in match.arg(firework): &#39;arg&#39; must be of length 1&gt;</code></pre>
+<p>Hmm, so it <em>is</em> getting the choices from somewhere. That’s good, as it explains
+how the case in which an argument is passed is handled. But where is
+<code>match.arg</code> getting the options if they aren’t passed to it? The docs, one more
+time:</p>
+<blockquote>
+<p>In the one-argument form <code>match.arg(arg)</code>, the choices are obtained from a
+default setting for the formal argument <code>arg</code> of the function from which
+<code>match.arg</code> was called.</p>
+</blockquote>
+<p>Ah, “the formal argument <code>arg</code> of the function from which <code>match.arg</code> was
+called”. But what’s a “formal argument”? The details get a little
+hairy<a href="#fn2" class="footnote-ref" id="fnref2"><sup>2</sup></a>, but essentially formals are the stuff you put in the parentheses
+after <code>function</code>. There’s even a sensibly-named function to get them, should
+you need:</p>
+<pre class="r"><code>str(formals(optim))
+#&gt; Dotted pair list of 9
+#&gt;  $ par    : symbol 
+#&gt;  $ fn     : symbol 
+#&gt;  $ gr     : NULL
+#&gt;  $ ...    : symbol 
+#&gt;  $ method : language c(&quot;Nelder-Mead&quot;, &quot;BFGS&quot;, &quot;CG&quot;, &quot;L-BFGS-B&quot;, &quot;SANN&quot;, &quot;Brent&quot;)
+#&gt;  $ lower  : language -Inf
+#&gt;  $ upper  : num Inf
+#&gt;  $ control: language list()
+#&gt;  $ hessian: logi FALSE</code></pre>
+<p>Notice this is not quite a normal list—some elements are empty (like <code>par</code> and
+<code>fn</code>), and <code>...</code> is actually the name of an element (that doesn’t exist). It is
+a list, but this is the topsy-turvy world of operating on the language, so this
+is a <em>pairlist</em>, which only much ever gets used for messing with the structure
+of functions.<a href="#fn3" class="footnote-ref" id="fnref3"><sup>3</sup></a></p>
+<p>Regardless, we can see that <code>method</code> is there with its default. The source of
+<code>match.arg</code> shows how it gets the default to use for <code>choices</code>:</p>
+<pre class="r"><code>head(match.arg, 7)
+#&gt;                                                                         
+#&gt; 1 function (arg, choices, several.ok = FALSE)                           
+#&gt; 2 {                                                                     
+#&gt; 3     if (missing(choices)) {                                           
+#&gt; 4         formal.args &lt;- formals(sys.function(sysP &lt;- sys.parent()))    
+#&gt; 5         choices &lt;- eval(formal.args[[as.character(substitute(arg))]], 
+#&gt; 6             envir = sys.frame(sysP))                                  
+#&gt; 7     }</code></pre>
+<p>This code is both complicated and hairy (please don’t use <code>&lt;-</code> in function
+calls), but we can see that <code>sys.function</code> gets the calling function, and
+<code>formals</code> extracts the formal arguments. Lines 5-6 extract the argument from
+those formals.</p>
+<p>Ignoring the environment-handling stuff, let’s try it out:</p>
+<pre class="r"><code>show_function &lt;- function(x, y = c(&quot;foo&quot;, &quot;bar&quot;)){
+    sys.function()
+}
+
+show_function()
+#&gt; function(x, y = c(&quot;foo&quot;, &quot;bar&quot;)){
+#&gt;     sys.function()
+#&gt; }
+
+fmls &lt;- formals(show_function())
+str(fmls)
+#&gt; Dotted pair list of 2
+#&gt;  $ x: symbol 
+#&gt;  $ y: language c(&quot;foo&quot;, &quot;bar&quot;)
+
+fmls$y    # This is still a language object...
+#&gt; c(&quot;foo&quot;, &quot;bar&quot;)
+eval(fmls$y)    # ...so evaluate it to make it a real object
+#&gt; [1] &quot;foo&quot; &quot;bar&quot;</code></pre>
+<p>Cool! This code explains the remaining mystery of <code>match.arg</code>: When only passed
+an argument, it grabs the default argument for that parameter and uses it as
+<code>choices</code>. That also explains why <code>match.arg</code> only works in a function if
+<code>choices</code> is not specified:</p>
+<pre class="r"><code>tryCatch(
+    match.arg(c(&quot;bratwurst&quot;, &quot;hot dog&quot;, &quot;hamburger&quot;)),
+    error = identity
+)
+#&gt; &lt;simpleError in formal.args[[as.character(substitute(arg))]]: no such index at level 1
+#&gt; &gt;</code></pre>
+<p>So when should you use <code>match.arg</code>? When you’re writing a function with a
+parameter that can take one of a fairly small number of string values. In
+return,</p>
+<ul>
+<li>your function will error informatively if passed an incorrect value (instead
+of breaking wherever it gets used),</li>
+<li>users get convenient partial-matching,<br />
+</li>
+<li>if you put the choices as the default, the possible choices will be very
+clear (to people who know about <code>match.arg</code>), and</li>
+<li>your friends coming from Python will reinforce their belief that R is
+strange, but will be unable to reproduce the behavior in Python without
+significant code.</li>
+</ul>
+<p>So is R quirky? Yep. But that’s not all bad.</p>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>This <code>NULL</code> bit is
+confusing, even if you come back after reading everything. It refers to a call
+like <code>match.arg(NULL, c("deviled eggs", "potato salad"))</code>, but the function
+rarely gets used that way. The “take the first one” bit matters, though,
+because this is the behavior if <code>choices</code> isn’t passed, as is explained later.<a href="#fnref1" class="footnote-back">↩︎</a></p></li>
+<li id="fn2"><p>Technically only closures have formals, not primitive functions. Go read
+about the difference if you like, but it rarely matters from a user
+perspective.<a href="#fnref2" class="footnote-back">↩︎</a></p></li>
+<li id="fn3"><p>Try playing around with <code>alist</code> and you’ll start to see what’s
+going on.<a href="#fnref3" class="footnote-back">↩︎</a></p></li>
+</ol>
+</div>
