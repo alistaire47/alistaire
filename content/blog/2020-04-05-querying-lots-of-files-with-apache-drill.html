@@ -1,0 +1,525 @@
+---
+title: Querying across files with Apache Drill
+author: Edward Visel
+date: '2020-04-06'
+slug: querying-across-files-with-apache-drill
+categories:
+  - R
+  - package
+  - programming
+tags:
+  - munging
+  - utility
+  - sergeant
+  - parquet
+  - arrow
+  - dplyr
+description: 'Globbing, implicit columns, and the power of SQL'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'Querying across files with Drill'
+type: post
+---
+
+<script src="/rmarkdown-libs/header-attrs/header-attrs.js"></script>
+
+
+<p>When I first used <a href="https://drill.apache.org/">Apache Drill</a> several years ago,
+it was one of those “holy crap this is amazing” moments. Moreover, every time
+since that I’ve thought “Oh, Drill could be really useful here” and spun it up,
+that thought has been quickly followed by “holy crap this is amazing” all over
+again. It’s just delightful. I keep thinking I should try out alternatives like
+Presto (which has <a href="https://prestodb.io/">two</a> <a href="https://prestosql.io/">branches</a>
+now) or <a href="https://impala.apache.org/">Apache Impala</a>, but I always start by
+spinning up Drill for comparison and never quite make it to anything else.</p>
+<p>To be fair, it’s not all roses:</p>
+<ul>
+<li>the installation seems very sensitive to your Java version and configuration</li>
+<li>Java errors and tracebacks can get long enough to overflow your buffer and are
+generally unrelated to what’s actually wrong, anyway</li>
+<li>configuring Drill beyond the basics can get confusing</li>
+</ul>
+<p>but once you get it working, none of that matters much.</p>
+<p>When it comes to working with Drill in R, much is owed to Bob Rudis, who wrote
+<a href="https://hrbrmstr.github.io/sergeant/">sergeant</a>—which defines a DBI and dplyr
+interface to Drill—as well as lots of pieces about the subject, notably
+<a href="https://rud.is/books/drill-sergeant-rstats/"><em>Using Apache Drill with R</em></a>. As
+there are thus plenty of resources on getting started with Drill, I am here
+going to focus on one particular workflow where Drill really shines: working
+with a directory of files.</p>
+<p>First, let’s make some sample files to play with using
+<a href="https://github.com/hadley/nycflights13">nycflights13</a>, whose <code>flights</code> table is
+not huge (336,776 rows), but big enough to suggest how Drill can be useful, e.g. 
+where the dataset is not just one year’s flights for one city, but, say, all
+global recorded flights.</p>
+<p>Let’s save the data as <a href="https://parquet.apache.org/">Parquet</a> files, which are
+considerably smaller than CSVs and allow individual columns to be read without
+scanning the whole file, making the a common choice for larger modern datasets.
+The <a href="https://arrow.apache.org/docs/r/">arrow</a> package makes reading and writing
+Parquet in R easy.<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a> Drill also has excellent
+Parquet support.</p>
+<pre class="r"><code>library(tidyverse)
+#&gt; ── Attaching packages ───────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+#&gt; ✓ ggplot2 3.3.0     ✓ purrr   0.3.3
+#&gt; ✓ tibble  3.0.0     ✓ dplyr   0.8.5
+#&gt; ✓ tidyr   1.0.2     ✓ stringr 1.4.0
+#&gt; ✓ readr   1.3.1     ✓ forcats 0.5.0
+#&gt; ── Conflicts ──────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+#&gt; x dplyr::filter() masks stats::filter()
+#&gt; x dplyr::lag()    masks stats::lag()
+
+flights_dir &lt;- &#39;/tmp/flights&#39;
+dir.create(flights_dir)
+
+data(&#39;flights&#39;, package = &#39;nycflights13&#39;)
+
+# make a directory for each carrier
+unique(flights$carrier) %&gt;% 
+    walk(~dir.create(file.path(flights_dir, .x)))
+
+# turn year and day into filenames and write the rest to parquet files
+flights %&gt;% 
+    group_by(carrier, year, month) %&gt;% 
+    nest() %&gt;% 
+    mutate(
+        filename = paste0(year, &#39;-&#39;, sprintf(&#39;%02d&#39;, month), &#39;.parquet&#39;),
+        filepath = file.path(flights_dir, carrier, filename)
+    ) %&gt;% 
+    with(walk2(data, filepath, arrow::write_parquet))
+
+list.dirs(flights_dir)
+#&gt;  [1] &quot;/tmp/flights&quot;    &quot;/tmp/flights/9E&quot; &quot;/tmp/flights/AA&quot; &quot;/tmp/flights/AS&quot;
+#&gt;  [5] &quot;/tmp/flights/B6&quot; &quot;/tmp/flights/DL&quot; &quot;/tmp/flights/EV&quot; &quot;/tmp/flights/F9&quot;
+#&gt;  [9] &quot;/tmp/flights/FL&quot; &quot;/tmp/flights/HA&quot; &quot;/tmp/flights/MQ&quot; &quot;/tmp/flights/OO&quot;
+#&gt; [13] &quot;/tmp/flights/UA&quot; &quot;/tmp/flights/US&quot; &quot;/tmp/flights/VX&quot; &quot;/tmp/flights/WN&quot;
+#&gt; [17] &quot;/tmp/flights/YV&quot;
+
+list.files(file.path(flights_dir, &quot;AA&quot;))
+#&gt;  [1] &quot;2013-01.parquet&quot; &quot;2013-02.parquet&quot; &quot;2013-03.parquet&quot; &quot;2013-04.parquet&quot;
+#&gt;  [5] &quot;2013-05.parquet&quot; &quot;2013-06.parquet&quot; &quot;2013-07.parquet&quot; &quot;2013-08.parquet&quot;
+#&gt;  [9] &quot;2013-09.parquet&quot; &quot;2013-10.parquet&quot; &quot;2013-11.parquet&quot; &quot;2013-12.parquet&quot;</code></pre>
+<p>Cool, now we’ve got some sample data. Reading a single file is easy:</p>
+<pre class="r"><code>aa_2013_01 &lt;- file.path(flights_dir, &quot;AA&quot;, &quot;2013-01.parquet&quot;)
+
+arrow::read_parquet(aa_2013_01)
+#&gt; # A tibble: 2,794 x 16
+#&gt;      day dep_time sched_dep_time dep_delay arr_time sched_arr_time arr_delay
+#&gt;    &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;
+#&gt;  1     1      542            540         2      923            850        33
+#&gt;  2     1      558            600        -2      753            745         8
+#&gt;  3     1      559            600        -1      941            910        31
+#&gt;  4     1      606            610        -4      858            910       -12
+#&gt;  5     1      623            610        13      920            915         5
+#&gt;  6     1      628            630        -2     1137           1140        -3
+#&gt;  7     1      629            630        -1      824            810        14
+#&gt;  8     1      635            635         0     1028            940        48
+#&gt;  9     1      656            700        -4      854            850         4
+#&gt; 10     1      656            659        -3      949            959       -10
+#&gt; # … with 2,784 more rows, and 9 more variables: flight &lt;int&gt;, tailnum &lt;chr&gt;,
+#&gt; #   origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;, distance &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   minute &lt;dbl&gt;, time_hour &lt;dttm&gt;</code></pre>
+<p>We can even only read in only a subset of columns:</p>
+<pre class="r"><code>arrow::read_parquet(aa_2013_01, contains(&#39;time&#39;))
+#&gt; # A tibble: 2,794 x 6
+#&gt;    dep_time sched_dep_time arr_time sched_arr_time air_time time_hour          
+#&gt;       &lt;int&gt;          &lt;int&gt;    &lt;int&gt;          &lt;int&gt;    &lt;dbl&gt; &lt;dttm&gt;             
+#&gt;  1      542            540      923            850      160 2013-01-01 10:00:00
+#&gt;  2      558            600      753            745      138 2013-01-01 11:00:00
+#&gt;  3      559            600      941            910      257 2013-01-01 11:00:00
+#&gt;  4      606            610      858            910      152 2013-01-01 11:00:00
+#&gt;  5      623            610      920            915      153 2013-01-01 11:00:00
+#&gt;  6      628            630     1137           1140      192 2013-01-01 11:00:00
+#&gt;  7      629            630      824            810      140 2013-01-01 11:00:00
+#&gt;  8      635            635     1028            940      248 2013-01-01 11:00:00
+#&gt;  9      656            700      854            850      143 2013-01-01 12:00:00
+#&gt; 10      656            659      949            959      142 2013-01-01 11:00:00
+#&gt; # … with 2,784 more rows</code></pre>
+<p>But what if we want to work across files? A common idiom is to iterate across a
+vector of files, read them in, and rbind them, e.g.</p>
+<pre class="r"><code>file.path(flights_dir, &quot;AA&quot;) %&gt;% 
+    list.files(full.names = TRUE) %&gt;% 
+    setNames(., .) %&gt;%    # so `.id` will work
+    map_dfr(arrow::read_parquet, .id = &quot;filename&quot;)
+#&gt; # A tibble: 32,729 x 17
+#&gt;    filename   day dep_time sched_dep_time dep_delay arr_time sched_arr_time
+#&gt;    &lt;chr&gt;    &lt;int&gt;    &lt;int&gt;          &lt;int&gt;     &lt;dbl&gt;    &lt;int&gt;          &lt;int&gt;
+#&gt;  1 /tmp/fl…     1      542            540         2      923            850
+#&gt;  2 /tmp/fl…     1      558            600        -2      753            745
+#&gt;  3 /tmp/fl…     1      559            600        -1      941            910
+#&gt;  4 /tmp/fl…     1      606            610        -4      858            910
+#&gt;  5 /tmp/fl…     1      623            610        13      920            915
+#&gt;  6 /tmp/fl…     1      628            630        -2     1137           1140
+#&gt;  7 /tmp/fl…     1      629            630        -1      824            810
+#&gt;  8 /tmp/fl…     1      635            635         0     1028            940
+#&gt;  9 /tmp/fl…     1      656            700        -4      854            850
+#&gt; 10 /tmp/fl…     1      656            659        -3      949            959
+#&gt; # … with 32,719 more rows, and 10 more variables: arr_delay &lt;dbl&gt;,
+#&gt; #   flight &lt;int&gt;, tailnum &lt;chr&gt;, origin &lt;chr&gt;, dest &lt;chr&gt;, air_time &lt;dbl&gt;,
+#&gt; #   distance &lt;dbl&gt;, hour &lt;dbl&gt;, minute &lt;dbl&gt;, time_hour &lt;dttm&gt;</code></pre>
+<p>This works—to a point. The core limitation is memory: if the files in question
+require more memory to read in than is available, this approach is insufficient.
+Parquet allows us to read in only some columns, which stretches this a bit
+further, but ultimately the next stage is processing each file as a batch before
+combining, e.g.</p>
+<pre class="r"><code>file.path(flights_dir, &quot;AA&quot;) %&gt;% 
+    list.files(full.names = TRUE) %&gt;% 
+    setNames(., .) %&gt;% 
+    map_dfr(
+        ~arrow::read_parquet(.x) %&gt;% count(day), 
+        .id = &quot;filename&quot;
+    )
+#&gt; # A tibble: 365 x 3
+#&gt;    filename                          day     n
+#&gt;    &lt;chr&gt;                           &lt;int&gt; &lt;int&gt;
+#&gt;  1 /tmp/flights/AA/2013-01.parquet     1    94
+#&gt;  2 /tmp/flights/AA/2013-01.parquet     2    94
+#&gt;  3 /tmp/flights/AA/2013-01.parquet     3    95
+#&gt;  4 /tmp/flights/AA/2013-01.parquet     4    95
+#&gt;  5 /tmp/flights/AA/2013-01.parquet     5    77
+#&gt;  6 /tmp/flights/AA/2013-01.parquet     6    89
+#&gt;  7 /tmp/flights/AA/2013-01.parquet     7    95
+#&gt;  8 /tmp/flights/AA/2013-01.parquet     8    92
+#&gt;  9 /tmp/flights/AA/2013-01.parquet     9    92
+#&gt; 10 /tmp/flights/AA/2013-01.parquet    10    93
+#&gt; # … with 355 more rows</code></pre>
+<p>…but this workflow gets frustrating as each operation requires boilerplate for
+iterating and combining. This can be abstracted away with tools like
+<a href="https://diskframe.com/">disk.frame</a>, but Drill offers a more powerful and
+flexible approach that handles a lot of issues like memory management and
+calculating cross-file metrics for us. Let’s spin up Drill:</p>
+<pre class="bash"><code>drill-embedded &amp;</code></pre>
+<p>Drill comes with Parquet support and a <code>tmp</code> workspace in the <code>dfs</code> file system
+source already configured, so we can jump right in. To read one file like the
+<code>read_parquet()</code> call above, then,</p>
+<pre class="r"><code>drill &lt;- sergeant::src_drill()
+drill
+#&gt; src:  DrillConnection
+#&gt; tbls: cp.default, dfs.default, dfs.root, dfs.tmp, information_schema, sys
+
+tbl(drill, &#39;dfs.tmp.`flights/AA/2013-01.parquet`&#39;)
+#&gt; # Source:   table&lt;dfs.tmp.`flights/AA/2013-01.parquet`&gt; [?? x 16]
+#&gt; # Database: DrillConnection
+#&gt;    flight arr_delay distance tailnum dep_time sched_dep_time origin
+#&gt;     &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;      &lt;dbl&gt;          &lt;dbl&gt; &lt;chr&gt; 
+#&gt;  1   1141        33     1089 N619AA       542            540 JFK   
+#&gt;  2    301         8      733 N3ALAA       558            600 LGA   
+#&gt;  3    707        31     1389 N3DUAA       559            600 LGA   
+#&gt;  4   1895       -12     1085 N633AA       606            610 EWR   
+#&gt;  5   1837         5     1096 N3EMAA       623            610 LGA   
+#&gt;  6    413        -3     1598 N3BAAA       628            630 JFK   
+#&gt;  7    303        14      733 N3CYAA       629            630 LGA   
+#&gt;  8    711        48     1389 N3GKAA       635            635 LGA   
+#&gt;  9    305         4      733 N4WNAA       656            700 LGA   
+#&gt; 10   1815       -10      944 N5FMAA       656            659 JFK   
+#&gt; # … with more rows, and 9 more variables: sched_arr_time &lt;dbl&gt;,
+#&gt; #   dep_delay &lt;dbl&gt;, dest &lt;chr&gt;, minute &lt;dbl&gt;, hour &lt;dbl&gt;, arr_time &lt;dbl&gt;,
+#&gt; #   air_time &lt;dbl&gt;, time_hour &lt;dbl&gt;, day &lt;dbl&gt;</code></pre>
+<p>Instead of iterating, Drill lets us use
+<a href="https://en.wikipedia.org/wiki/Glob_%28programming%29">globbing</a>:</p>
+<pre class="r"><code>tbl(drill, &quot;dfs.tmp.`flights/*`&quot;)
+#&gt; # Source:   table&lt;dfs.tmp.`flights/*`&gt; [?? x 17]
+#&gt; # Database: DrillConnection
+#&gt;    flight arr_delay distance tailnum dep_time sched_dep_time origin
+#&gt;     &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;      &lt;dbl&gt;          &lt;dbl&gt; &lt;chr&gt; 
+#&gt;  1   3353       -32      509 N927XJ       745            745 JFK   
+#&gt;  2   3611       -23      340 N8458A       758            805 JFK   
+#&gt;  3   3538       -29     1029 N605LR       813            815 JFK   
+#&gt;  4   3492       -28      213 N924XJ       845            850 JFK   
+#&gt;  5   3521        10      740 N934XJ       854            830 JFK   
+#&gt;  6   3902        13      461 N8554A      1044           1050 LGA   
+#&gt;  7   3614       -12      296 N8794B      1051           1055 LGA   
+#&gt;  8   3606       -18      184 N8808H      1156           1159 JFK   
+#&gt;  9   3836        -1      258 N8960A      1209           1210 LGA   
+#&gt; 10   3303       -21      301 N923XJ      1223           1230 JFK   
+#&gt; # … with more rows, and 10 more variables: sched_arr_time &lt;dbl&gt;,
+#&gt; #   dep_delay &lt;dbl&gt;, dir0 &lt;dbl&gt;, dest &lt;chr&gt;, minute &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   arr_time &lt;dbl&gt;, air_time &lt;dbl&gt;, time_hour &lt;dbl&gt;, day &lt;dbl&gt;</code></pre>
+<p>If we collect that into memory (given it’s small enough that we can), we get
+<code>flights</code> back:</p>
+<pre class="r"><code>flights2 &lt;- tbl(drill, &quot;dfs.tmp.`flights/*`&quot;) %&gt;% collect()
+flights2
+#&gt; # A tibble: 336,776 x 17
+#&gt;    flight arr_delay distance tailnum dep_time sched_dep_time origin
+#&gt;     &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;      &lt;dbl&gt;          &lt;dbl&gt; &lt;chr&gt; 
+#&gt;  1   3496        -4      335 N904XJ       643            645 LGA   
+#&gt;  2   3769         7      569 N832AY       655            659 EWR   
+#&gt;  3   3611       -10      340 N8673D       749            759 JFK   
+#&gt;  4   3507        28     1182 N934XJ       752            800 JFK   
+#&gt;  5   3353       -11      509 N907XJ       755            800 JFK   
+#&gt;  6   3528       -12      833 N293PQ       800            805 LGA   
+#&gt;  7   3538       -18     1029 N928XJ       801            800 JFK   
+#&gt;  8   3489        -7     1080 N917XJ       805            805 LGA   
+#&gt;  9   3317       -10      301 N935XJ       807            815 JFK   
+#&gt; 10   3868         1      427 N8541D       825            830 JFK   
+#&gt; # … with 336,766 more rows, and 10 more variables: sched_arr_time &lt;dbl&gt;,
+#&gt; #   dep_delay &lt;dbl&gt;, dir0 &lt;chr&gt;, dest &lt;chr&gt;, minute &lt;dbl&gt;, hour &lt;dbl&gt;,
+#&gt; #   arr_time &lt;dbl&gt;, air_time &lt;dbl&gt;, time_hour &lt;dbl&gt;, day &lt;dbl&gt;
+
+dim(flights2)
+#&gt; [1] 336776     17
+
+rm(flights2)</code></pre>
+<p>…except <code>flights2</code> is not <em>exactly</em> the same as <code>flights</code> because of how we
+wrote it to disk: the carrier, year, and month are now in the filepaths, but not
+in the saved files at all.</p>
+<p>But we can get those from Drill! Drill 1.8 introduces four “implicit columns”:
+<code>filename</code>, <code>filepath</code>, <code>suffix</code>, and <code>fqn</code> (fully qualified name). Working with
+them in dplyr is a little weird, because they don’t exist, so you can’t select
+them until you mutate them:</p>
+<pre class="r"><code>tryCatch(
+    tbl(drill, &#39;dfs.tmp.`flights/*`&#39;) %&gt;% select(filename),
+    error = print
+)
+#&gt; &lt;error/vctrs_error_subscript_oob&gt;
+#&gt; Can&#39;t subset columns that don&#39;t exist.
+#&gt; x The column `filename` doesn&#39;t exist.
+#&gt; Backtrace:
+#&gt;   1. base::local(...)
+#&gt;  57. vctrs:::stop_subscript_oob(...)
+#&gt;  58. vctrs:::stop_subscript(...)
+
+tbl(drill, &#39;dfs.tmp.`flights/*`&#39;) %&gt;% 
+    mutate(filename, filepath, suffix, fqn) %&gt;% 
+    select(filename, filepath, suffix, fqn) %&gt;% 
+    distinct()
+#&gt; # Source:   lazy query [?? x 4]
+#&gt; # Database: DrillConnection
+#&gt;    fqn                             filename        filepath        suffix 
+#&gt;    &lt;chr&gt;                           &lt;chr&gt;           &lt;chr&gt;           &lt;chr&gt;  
+#&gt;  1 /tmp/flights/AS/2013-01.parquet 2013-01.parquet /tmp/flights/AS parquet
+#&gt;  2 /tmp/flights/DL/2013-01.parquet 2013-01.parquet /tmp/flights/DL parquet
+#&gt;  3 /tmp/flights/DL/2013-02.parquet 2013-02.parquet /tmp/flights/DL parquet
+#&gt;  4 /tmp/flights/HA/2013-01.parquet 2013-01.parquet /tmp/flights/HA parquet
+#&gt;  5 /tmp/flights/MQ/2013-01.parquet 2013-01.parquet /tmp/flights/MQ parquet
+#&gt;  6 /tmp/flights/MQ/2013-05.parquet 2013-05.parquet /tmp/flights/MQ parquet
+#&gt;  7 /tmp/flights/US/2013-12.parquet 2013-12.parquet /tmp/flights/US parquet
+#&gt;  8 /tmp/flights/VX/2013-12.parquet 2013-12.parquet /tmp/flights/VX parquet
+#&gt;  9 /tmp/flights/WN/2013-04.parquet 2013-04.parquet /tmp/flights/WN parquet
+#&gt; 10 /tmp/flights/9E/2013-11.parquet 2013-11.parquet /tmp/flights/9E parquet
+#&gt; # … with more rows</code></pre>
+<p>Cool! Now let’s go calculate some stuff! Let’s start basic with a count of
+flights by carrier. But remember, carrier is part of the filepath. As it
+happens, it’s pretty easy to extract with <code>right()</code>, which will get passed
+through as a SQL function, but in this case you could also group by <code>filepath</code>
+directly and then clean it up with regex after collecting.</p>
+<pre class="r"><code>tbl(drill, &#39;dfs.tmp.`flights/*`&#39;) %&gt;% 
+    group_by(carrier = right(filepath, 2L)) %&gt;% 
+    count()
+#&gt; # Source:   lazy query [?? x 2]
+#&gt; # Database: DrillConnection
+#&gt; # Groups:   carrier
+#&gt;    carrier     n
+#&gt;    &lt;chr&gt;   &lt;dbl&gt;
+#&gt;  1 AS        714
+#&gt;  2 AA      32729
+#&gt;  3 EV      54173
+#&gt;  4 F9        685
+#&gt;  5 VX       5162
+#&gt;  6 B6      54635
+#&gt;  7 US      20536
+#&gt;  8 WN      12275
+#&gt;  9 9E      18460
+#&gt; 10 YV        601
+#&gt; # … with more rows</code></pre>
+<p>We can extract months from the filenames, too:</p>
+<pre class="r"><code>tbl(drill, &#39;dfs.tmp.`flights/*`&#39;) %&gt;% 
+    group_by(month = left(filename, 7L)) %&gt;% 
+    count() %&gt;% 
+    arrange(month)
+#&gt; # Source:     lazy query [?? x 2]
+#&gt; # Database:   DrillConnection
+#&gt; # Groups:     month
+#&gt; # Ordered by: month
+#&gt;    month       n
+#&gt;    &lt;chr&gt;   &lt;dbl&gt;
+#&gt;  1 2013-01 27004
+#&gt;  2 2013-02 24951
+#&gt;  3 2013-03 28834
+#&gt;  4 2013-04 28330
+#&gt;  5 2013-05 28796
+#&gt;  6 2013-06 28243
+#&gt;  7 2013-07 29425
+#&gt;  8 2013-08 29327
+#&gt;  9 2013-09 27574
+#&gt; 10 2013-10 28889
+#&gt; # … with more rows</code></pre>
+<p>Moreover, we can use these tricks to reconstruct a view (of sorts) of the entire
+dataset without collecting it into R:</p>
+<pre class="r"><code>flights_tbl &lt;- tbl(drill, &#39;dfs.tmp.`flights/*`&#39;) %&gt;% 
+    mutate(
+        carrier = right(filepath, 2L),
+        year = left(filename, 4L), 
+        month = substr(filename, 6L, 2L)
+    )
+
+flights_tbl
+#&gt; # Source:   lazy query [?? x 20]
+#&gt; # Database: DrillConnection
+#&gt;    flight arr_delay distance tailnum  year dep_time sched_dep_time origin
+#&gt;     &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;   &lt;dbl&gt;    &lt;dbl&gt;          &lt;dbl&gt; &lt;chr&gt; 
+#&gt;  1   3353       -32      509 N927XJ   2013      745            745 JFK   
+#&gt;  2   3611       -23      340 N8458A   2013      758            805 JFK   
+#&gt;  3   3538       -29     1029 N605LR   2013      813            815 JFK   
+#&gt;  4   3492       -28      213 N924XJ   2013      845            850 JFK   
+#&gt;  5   3521        10      740 N934XJ   2013      854            830 JFK   
+#&gt;  6   3902        13      461 N8554A   2013     1044           1050 LGA   
+#&gt;  7   3614       -12      296 N8794B   2013     1051           1055 LGA   
+#&gt;  8   3606       -18      184 N8808H   2013     1156           1159 JFK   
+#&gt;  9   3836        -1      258 N8960A   2013     1209           1210 LGA   
+#&gt; 10   3303       -21      301 N923XJ   2013     1223           1230 JFK   
+#&gt; # … with more rows, and 12 more variables: sched_arr_time &lt;dbl&gt;,
+#&gt; #   dep_delay &lt;dbl&gt;, dir0 &lt;dbl&gt;, dest &lt;chr&gt;, minute &lt;dbl&gt;, carrier &lt;dbl&gt;,
+#&gt; #   hour &lt;dbl&gt;, month &lt;chr&gt;, arr_time &lt;dbl&gt;, air_time &lt;dbl&gt;, time_hour &lt;dbl&gt;,
+#&gt; #   day &lt;dbl&gt;</code></pre>
+<p>This tibble is exactly equivalent to the original <code>flights</code> object, except it
+behaves like a database and is stored on-disk. The database interface means we
+would have to collect to local memory to do most complicated things, but we can
+do rather a lot—anything you can write in ANSI SQL—which is especially helpful
+for subsetting and aggregating data before collecting for modeling or other
+purposes.</p>
+<p>A few things we can do:</p>
+<div id="subsetting" class="section level3">
+<h3>Subsetting</h3>
+<pre class="r"><code>flights_tbl %&gt;% 
+    group_by(month, day) %&gt;% 
+    filter(
+        distance &gt; mean(distance, na.rm = TRUE),
+        carrier %in% c(&quot;AA&quot;, &quot;UA&quot;, &quot;DL&quot;)
+    ) %&gt;% 
+    ungroup() %&gt;%
+    select(carrier, origin, dest, dep_delay, arr_delay)
+#&gt; # Source:   lazy query [?? x 5]
+#&gt; # Database: DrillConnection
+#&gt;    carrier arr_delay origin dep_delay dest 
+#&gt;    &lt;chr&gt;       &lt;dbl&gt; &lt;chr&gt;      &lt;dbl&gt; &lt;chr&gt;
+#&gt;  1 AA            102 LGA           81 MIA  
+#&gt;  2 AA             34 JFK           37 LAX  
+#&gt;  3 AA              0 JFK           17 SFO  
+#&gt;  4 AA             -8 LGA           -4 DFW  
+#&gt;  5 AA            -12 EWR           -9 DFW  
+#&gt;  6 AA             10 JFK           -3 FLL  
+#&gt;  7 AA             -1 LGA           -3 DFW  
+#&gt;  8 AA            -14 JFK           -4 SJU  
+#&gt;  9 AA              8 EWR           11 MIA  
+#&gt; 10 AA             -2 LGA           -7 MIA  
+#&gt; # … with more rows</code></pre>
+</div>
+<div id="calculating-summary-statistics" class="section level2">
+<h2>Calculating summary statistics</h2>
+<pre class="r"><code>flights_tbl %&gt;% 
+    group_by(origin) %&gt;% 
+    summarise(
+        n_flights = n(),
+        n_dest = n_distinct(dest),
+        min_air_time = min(air_time, na.rm = TRUE),
+        max_dep_delay = max(arr_delay, na.rm = TRUE),
+        mean_arr_delay = mean(arr_delay, na.rm = TRUE),
+        sd_distance = sd(distance)
+    )
+#&gt; # Source:   lazy query [?? x 7]
+#&gt; # Database: DrillConnection
+#&gt;   sd_distance min_air_time n_flights mean_arr_delay origin n_dest max_dep_delay
+#&gt;         &lt;dbl&gt;        &lt;dbl&gt;     &lt;dbl&gt;          &lt;dbl&gt; &lt;chr&gt;   &lt;dbl&gt;         &lt;dbl&gt;
+#&gt; 1        896.           21    111279           5.55 JFK        70          1272
+#&gt; 2        730.           20    120835           9.11 EWR        86          1109
+#&gt; 3        372.           21    104662           5.78 LGA        68           915</code></pre>
+<div id="date-time-and-datetime-handling" class="section level3">
+<h3>Date, time, and datetime handling</h3>
+<pre class="r"><code>flights_tbl %&gt;% 
+    filter(!is.na(dep_time), !carrier %like% &#39;%9%&#39;) %&gt;%
+    mutate(
+        # restructure `dep_time` as an actual time object instead of a weird int
+        dep_time = cast(paste(
+            as.character(dep_time / 100L), 
+            right(dep_time, 2L), 
+            &#39;00&#39;, 
+            sep = &#39;:&#39;
+        ) %as% TIME),
+        # reconstruct flight date and time
+        flight_date = as.Date(paste(year, month, as.character(day), sep = &#39;-&#39;)),
+        flight_time = cast(paste(
+            lpad_with(as.integer(hour), 2L, &#39;0&#39;), 
+            lpad_with(as.integer(minute), 2L, &#39;0&#39;), 
+            &#39;00&#39;, 
+            sep = &#39;:&#39;
+        ) %as% TIME),
+        # construct a timestamp from a date and time
+        flight_timestamp = as.POSIXct(paste(as.character(flight_date), as.character(flight_time))),
+        dep_timestamp = as.POSIXct(paste(as.character(flight_date), as.character(dep_time))),
+        # recalculate dep_delay in raw SQL
+        dep_delay = sql(&quot;EXTRACT(MINUTE FROM (dep_time - flight_time))&quot;)
+    ) %&gt;% 
+    select(carrier, flight_date, flight_time, flight_timestamp, dep_time, dep_delay)
+#&gt; # Source:   lazy query [?? x 6]
+#&gt; # Database: DrillConnection
+#&gt;    carrier flight_timestamp    flight_date dep_time dep_delay flight_time
+#&gt;    &lt;chr&gt;   &lt;dttm&gt;              &lt;date&gt;      &lt;time&gt;       &lt;dbl&gt; &lt;time&gt;     
+#&gt;  1 AA      2013-10-01 05:45:00 2013-10-01  05:36           -9 05:45      
+#&gt;  2 AA      2013-10-01 06:00:00 2013-10-01  05:52           -8 06:00      
+#&gt;  3 AA      2013-10-01 06:00:00 2013-10-01  05:59           -1 06:00      
+#&gt;  4 AA      2013-10-01 06:10:00 2013-10-01  06:07           -3 06:10      
+#&gt;  5 AA      2013-10-01 06:29:00 2013-10-01  06:21           -8 06:29      
+#&gt;  6 AA      2013-10-01 06:30:00 2013-10-01  06:26           -4 06:30      
+#&gt;  7 AA      2013-10-01 06:55:00 2013-10-01  06:52           -3 06:55      
+#&gt;  8 AA      2013-10-01 07:05:00 2013-10-01  06:56           -9 07:05      
+#&gt;  9 AA      2013-10-01 07:10:00 2013-10-01  07:01           -9 07:10      
+#&gt; 10 AA      2013-10-01 07:10:00 2013-10-01  07:04           -6 07:10      
+#&gt; # … with more rows</code></pre>
+</div>
+<div id="grouped-aggregations" class="section level3">
+<h3>Grouped aggregations</h3>
+<pre class="r"><code>flights_tbl %&gt;%
+    mutate(
+        # turn weird int times (745 for 7:45) into numeric representations (7.75)
+        dep_time_float = (dep_time / 100L) + (mod(dep_time, 100L) / 60),
+        arr_time_float = (arr_time / 100L) + (mod(arr_time, 100L) / 60)
+    ) %&gt;%
+    group_by(carrier) %&gt;% 
+    summarise(
+        arr_delay_mean = mean(arr_delay, na.rm = TRUE),
+        arr_delay_sd = sd(arr_delay),
+        time_corr = cor(dep_time_float, arr_time_float)
+    )
+#&gt; # Source:   lazy query [?? x 4]
+#&gt; # Database: DrillConnection
+#&gt;    arr_delay_mean carrier time_corr arr_delay_sd
+#&gt;             &lt;dbl&gt; &lt;chr&gt;       &lt;dbl&gt;        &lt;dbl&gt;
+#&gt;  1          -9.93 AS          0.938         36.5
+#&gt;  2          10.8  MQ          0.859         43.2
+#&gt;  3           2.13 US          0.969         33.1
+#&gt;  4           9.65 WN          0.905         46.9
+#&gt;  5          21.9  F9          0.919         61.6
+#&gt;  6          20.1  FL          0.845         54.1
+#&gt;  7           3.56 UA          0.656         41.0
+#&gt;  8           1.76 VX          0.661         50.0
+#&gt;  9           7.38 9E          0.827         50.1
+#&gt; 10           9.46 B6          0.330         42.8
+#&gt; # … with more rows</code></pre>
+<p>Writing SQL via dplyr requires more effort than working on an in-memory data
+frame because</p>
+<ul>
+<li>Drill does not do implicit type coercion like R, so requires explicit casting
+more often. It is also more sensitive to integers vs. doubles/floats.</li>
+<li>Some R functions will be translated to SQL
+(<a href="https://hrbrmstr.github.io/sergeant/reference/drill_custom_functions.html"><code>?sergeant::drill_custom_functions</code></a>
+is a useful reference here), but not all. Untranslated functions are passed
+through, which lets us use SQL functions. If the syntax is too different,
+strings of raw SQL can be escaped with <code>sql()</code>.</li>
+<li>Null handling is a little different, and can require caution.</li>
+</ul>
+<p>Depending a bit on data size and location (Drill also works very nicely on other
+data sources like S3), I typically limit usage to what I can write quickly, i.e. 
+basic summary stats and subsetting, which is usually sufficient to reduce the
+amount of data to something that fits more neatly in memory. But use it how it
+suits you! Happy drilling!</p>
+</div>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>Arrow is also cool because it defines a common in-memory
+data structure for rectangular data, which suggests the possibility of sharing
+in-memory data between R, Python, C++, and more.<a href="#fnref1" class="footnote-back">↩︎</a></p></li>
+</ol>
+</div>

@@ -1,0 +1,338 @@
+---
+title: Querying across files with Apache Drill
+author: Edward Visel
+date: '2020-04-06'
+slug: querying-across-files-with-apache-drill
+categories:
+  - R
+  - package
+  - programming
+tags:
+  - munging
+  - utility
+  - sergeant
+  - parquet
+  - arrow
+  - dplyr
+description: 'Globbing, implicit columns, and the power of SQL'
+featured: ''
+featuredalt: ''
+featuredpath: ''
+linktitle: 'Querying across files with Drill'
+type: post
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+```
+
+When I first used [Apache Drill](https://drill.apache.org/) several years ago, 
+it was one of those "holy crap this is amazing" moments. Moreover, every time 
+since that I've thought "Oh, Drill could be really useful here" and spun it up, 
+that thought has been quickly followed by "holy crap this is amazing" all over 
+again. It's just delightful. I keep thinking I should try out alternatives like 
+Presto (which has [two](https://prestodb.io/) [branches](https://prestosql.io/) 
+now) or [Apache Impala](https://impala.apache.org/), but I always start by 
+spinning up Drill for comparison and never quite make it to anything else.
+
+To be fair, it's not all roses:
+
+- the installation seems very sensitive to your Java version and configuration
+- Java errors and tracebacks can get long enough to overflow your buffer and are 
+    generally unrelated to what's actually wrong, anyway
+- configuring Drill beyond the basics can get confusing
+
+but once you get it working, none of that matters much.
+
+When it comes to working with Drill in R, much is owed to Bob Rudis, who wrote 
+[sergeant](https://hrbrmstr.github.io/sergeant/)—which defines a DBI and dplyr 
+interface to Drill—as well as lots of pieces about the subject, notably 
+[_Using Apache Drill with R_](https://rud.is/books/drill-sergeant-rstats/). As 
+there are thus plenty of resources on getting started with Drill, I am here 
+going to focus on one particular workflow where Drill really shines: working 
+with a directory of files.
+
+First, let's make some sample files to play with using 
+[nycflights13](https://github.com/hadley/nycflights13), whose `flights` table is 
+not huge (336,776 rows), but big enough to suggest how Drill can be useful, e.g. 
+where the dataset is not just one year's flights for one city, but, say, all 
+global recorded flights.
+
+Let's save the data as [Parquet](https://parquet.apache.org/) files, which are 
+considerably smaller than CSVs and allow individual columns to be read without 
+scanning the whole file, making the a common choice for larger modern datasets. 
+The [arrow](https://arrow.apache.org/docs/r/) package makes reading and writing 
+Parquet in R easy.^[Arrow is also cool because it defines a common in-memory 
+data structure for rectangular data, which suggests the possibility of sharing 
+in-memory data between R, Python, C++, and more.] Drill also has excellent 
+Parquet support.
+
+```{r sample-data, warning=FALSE}
+library(tidyverse)
+
+flights_dir <- '/tmp/flights'
+dir.create(flights_dir)
+
+data('flights', package = 'nycflights13')
+
+# make a directory for each carrier
+unique(flights$carrier) %>% 
+    walk(~dir.create(file.path(flights_dir, .x)))
+
+# turn year and day into filenames and write the rest to parquet files
+flights %>% 
+    group_by(carrier, year, month) %>% 
+    nest() %>% 
+    mutate(
+        filename = paste0(year, '-', sprintf('%02d', month), '.parquet'),
+        filepath = file.path(flights_dir, carrier, filename)
+    ) %>% 
+    with(walk2(data, filepath, arrow::write_parquet))
+
+list.dirs(flights_dir)
+
+list.files(file.path(flights_dir, "AA"))
+```
+
+Cool, now we've got some sample data. Reading a single file is easy:
+
+```{r signle-file}
+aa_2013_01 <- file.path(flights_dir, "AA", "2013-01.parquet")
+
+arrow::read_parquet(aa_2013_01)
+```
+
+We can even only read in only a subset of columns:
+
+```{r col-subset}
+arrow::read_parquet(aa_2013_01, contains('time'))
+```
+
+But what if we want to work across files? A common idiom is to iterate across a 
+vector of files, read them in, and rbind them, e.g.
+
+```{r map_dfr}
+file.path(flights_dir, "AA") %>% 
+    list.files(full.names = TRUE) %>% 
+    setNames(., .) %>%    # so `.id` will work
+    map_dfr(arrow::read_parquet, .id = "filename")
+```
+
+This works—to a point. The core limitation is memory: if the files in question 
+require more memory to read in than is available, this approach is insufficient. 
+Parquet allows us to read in only some columns, which stretches this a bit 
+further, but ultimately the next stage is processing each file as a batch before 
+combining, e.g.
+
+```{r batch}
+file.path(flights_dir, "AA") %>% 
+    list.files(full.names = TRUE) %>% 
+    setNames(., .) %>% 
+    map_dfr(
+        ~arrow::read_parquet(.x) %>% count(day), 
+        .id = "filename"
+    )
+```
+
+...but this workflow gets frustrating as each operation requires boilerplate for 
+iterating and combining. This can be abstracted away with tools like 
+[disk.frame](https://diskframe.com/), but Drill offers a more powerful and 
+flexible approach that handles a lot of issues like memory management and 
+calculating cross-file metrics for us. Let's spin up Drill:
+
+```{bash start-drill, eval=FALSE}
+drill-embedded &
+```
+
+Drill comes with Parquet support and a `tmp` workspace in the `dfs` file system 
+source already configured, so we can jump right in. To read one file like the 
+`read_parquet()` call above, then,
+
+```{r read-one-drill}
+drill <- sergeant::src_drill()
+drill
+
+tbl(drill, 'dfs.tmp.`flights/AA/2013-01.parquet`')
+```
+
+Instead of iterating, Drill lets us use 
+[globbing](https://en.wikipedia.org/wiki/Glob_%28programming%29):
+
+```{r glob}
+tbl(drill, "dfs.tmp.`flights/*`")
+```
+
+If we collect that into memory (given it's small enough that we can), we get 
+`flights` back:
+
+```{r flights-2}
+flights2 <- tbl(drill, "dfs.tmp.`flights/*`") %>% collect()
+flights2
+
+dim(flights2)
+
+rm(flights2)
+```
+
+...except `flights2` is not _exactly_ the same as `flights` because of how we 
+wrote it to disk: the carrier, year, and month are now in the filepaths, but not 
+in the saved files at all.
+
+But we can get those from Drill! Drill 1.8 introduces four "implicit columns": 
+`filename`, `filepath`, `suffix`, and `fqn` (fully qualified name). Working with 
+them in dplyr is a little weird, because they don't exist, so you can't select 
+them until you mutate them:
+
+```{r implicit-cols}
+tryCatch(
+    tbl(drill, 'dfs.tmp.`flights/*`') %>% select(filename),
+    error = print
+)
+
+tbl(drill, 'dfs.tmp.`flights/*`') %>% 
+    mutate(filename, filepath, suffix, fqn) %>% 
+    select(filename, filepath, suffix, fqn) %>% 
+    distinct()
+```
+
+Cool! Now let's go calculate some stuff! Let's start basic with a count of 
+flights by carrier. But remember, carrier is part of the filepath. As it 
+happens, it's pretty easy to extract with `right()`, which will get passed 
+through as a SQL function, but in this case you could also group by `filepath` 
+directly and then clean it up with regex after collecting.
+
+```{r carrier}
+tbl(drill, 'dfs.tmp.`flights/*`') %>% 
+    group_by(carrier = right(filepath, 2L)) %>% 
+    count()
+```
+
+We can extract months from the filenames, too:
+
+```{r month}
+tbl(drill, 'dfs.tmp.`flights/*`') %>% 
+    group_by(month = left(filename, 7L)) %>% 
+    count() %>% 
+    arrange(month)
+```
+
+Moreover, we can use these tricks to reconstruct a view (of sorts) of the entire 
+dataset without collecting it into R:
+
+```{r flights_tbl}
+flights_tbl <- tbl(drill, 'dfs.tmp.`flights/*`') %>% 
+    mutate(
+        carrier = right(filepath, 2L),
+        year = left(filename, 4L), 
+        month = substr(filename, 6L, 2L)
+    )
+
+flights_tbl
+```
+
+This tibble is exactly equivalent to the original `flights` object, except it 
+behaves like a database and is stored on-disk. The database interface means we 
+would have to collect to local memory to do most complicated things, but we can 
+do rather a lot—anything you can write in ANSI SQL—which is especially helpful 
+for subsetting and aggregating data before collecting for modeling or other 
+purposes.
+
+A few things we can do:
+
+### Subsetting
+
+```{r subsetting, warning=FALSE}
+flights_tbl %>% 
+    group_by(month, day) %>% 
+    filter(
+        distance > mean(distance, na.rm = TRUE),
+        carrier %in% c("AA", "UA", "DL")
+    ) %>% 
+    ungroup() %>%
+    select(carrier, origin, dest, dep_delay, arr_delay)
+```
+
+## Calculating summary statistics
+
+```{r summary-stats}
+flights_tbl %>% 
+    group_by(origin) %>% 
+    summarise(
+        n_flights = n(),
+        n_dest = n_distinct(dest),
+        min_air_time = min(air_time, na.rm = TRUE),
+        max_dep_delay = max(arr_delay, na.rm = TRUE),
+        mean_arr_delay = mean(arr_delay, na.rm = TRUE),
+        sd_distance = sd(distance)
+    )
+```
+
+### Date, time, and datetime handling
+
+```{r datetimes}
+flights_tbl %>% 
+    filter(!is.na(dep_time), !carrier %like% '%9%') %>%
+    mutate(
+        # restructure `dep_time` as an actual time object instead of a weird int
+        dep_time = cast(paste(
+            as.character(dep_time / 100L), 
+            right(dep_time, 2L), 
+            '00', 
+            sep = ':'
+        ) %as% TIME),
+        # reconstruct flight date and time
+        flight_date = as.Date(paste(year, month, as.character(day), sep = '-')),
+        flight_time = cast(paste(
+            lpad_with(as.integer(hour), 2L, '0'), 
+            lpad_with(as.integer(minute), 2L, '0'), 
+            '00', 
+            sep = ':'
+        ) %as% TIME),
+        # construct a timestamp from a date and time
+        flight_timestamp = as.POSIXct(paste(as.character(flight_date), as.character(flight_time))),
+        dep_timestamp = as.POSIXct(paste(as.character(flight_date), as.character(dep_time))),
+        # recalculate dep_delay in raw SQL
+        dep_delay = sql("EXTRACT(MINUTE FROM (dep_time - flight_time))")
+    ) %>% 
+    select(carrier, flight_date, flight_time, flight_timestamp, dep_time, dep_delay)
+```
+
+### Grouped aggregations
+
+```{r aggregations}
+flights_tbl %>%
+    mutate(
+        # turn weird int times (745 for 7:45) into numeric representations (7.75)
+        dep_time_float = (dep_time / 100L) + (mod(dep_time, 100L) / 60),
+        arr_time_float = (arr_time / 100L) + (mod(arr_time, 100L) / 60)
+    ) %>%
+    group_by(carrier) %>% 
+    summarise(
+        arr_delay_mean = mean(arr_delay, na.rm = TRUE),
+        arr_delay_sd = sd(arr_delay),
+        time_corr = cor(dep_time_float, arr_time_float)
+    )
+```
+
+Writing SQL via dplyr requires more effort than working on an in-memory data 
+frame because
+
+- Drill does not do implicit type coercion like R, so requires explicit casting 
+    more often. It is also more sensitive to integers vs. doubles/floats.
+- Some R functions will be translated to SQL 
+    ([`?sergeant::drill_custom_functions`](https://hrbrmstr.github.io/sergeant/reference/drill_custom_functions.html) 
+    is a useful reference here), but not all. Untranslated functions are passed 
+    through, which lets us use SQL functions. If the syntax is too different, 
+    strings of raw SQL can be escaped with `sql()`.
+- Null handling is a little different, and can require caution.
+
+Depending a bit on data size and location (Drill also works very nicely on other 
+data sources like S3), I typically limit usage to what I can write quickly, i.e. 
+basic summary stats and subsetting, which is usually sufficient to reduce the 
+amount of data to something that fits more neatly in memory. But use it how it 
+suits you! Happy drilling!
+
+```{r cleanup, echo = FALSE}
+unlink(flights_dir, recursive = TRUE)
+```
+
